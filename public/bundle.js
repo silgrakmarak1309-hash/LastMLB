@@ -255,137 +255,7 @@ async function bindDeviceEmailAsync(email) {
 function bindDeviceEmail(email) {
   bindDeviceEmailAsync(email).catch(()=>{});
 }
-function bw({children:e}){
-  const[t,n]=m.useState(null),
-  [r,s]=m.useState(null),
-  [i,l]=m.useState(null),
-  [o,c]=m.useState(!0),
-  u=m.useCallback(async w=>{
-    try {
-      let p_data=null;
-      try{const cached=localStorage.getItem("mlb_saved_profile_"+w);if(cached)p_data=JSON.parse(cached);}catch(e){}
-      try{
-        const{data:j,error:f}=await L.from("profiles").select("*").eq("id",w).maybeSingle();
-        if(!f&&j){p_data={...(p_data||{}),...j};}
-      }catch(err){}
-      try{
-        const{data:u_auth}=await L.auth.getUser();
-        const u_email=u_auth?.user?.email;
-        const u_name=u_auth?.user?.user_metadata?.name||u_email?.split('@')[0]||'User';
-        const isAdminUser = isUserAdmin({email:u_email});
-        if(!p_data){
-          p_data={id:w,email:u_email,name:u_name,role:isAdminUser?'super_admin':'user',account_status:'active',status:'active',is_pro:isAdminUser,pro_status:isAdminUser?'active':'inactive',created_at:new Date().toISOString()};
-          try{await L.from('profiles').upsert(p_data)}catch(err){}
-        }else{
-          if(isAdminUser){
-            p_data={...p_data,role:'super_admin',is_pro:!0,pro_status:'active'};
-            try{await L.from('profiles').update({role:'super_admin',is_pro:!0,pro_status:'active'}).eq('id',w)}catch(err){}
-          }
-        }
-      }catch(e){}
-      if(p_data){
-        try {
-          const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");
-          const sOverride = statusOverrides[p_data.id] || (p_data.email && (statusOverrides[p_data.email] || statusOverrides[p_data.email.toLowerCase().trim()]));
-          if (sOverride) {
-            p_data.account_status = sOverride;
-            p_data.status = sOverride;
-          }
-          const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");
-          const pOverride = proOverrides[p_data.id] || (p_data.email && (proOverrides[p_data.email] || proOverrides[p_data.email.toLowerCase().trim()]));
-          if (pOverride) {
-            if (pOverride.is_pro !== undefined) p_data.is_pro = pOverride.is_pro;
-            if (pOverride.pro_status !== undefined) p_data.pro_status = pOverride.pro_status;
-            if (pOverride.pro_expires_at) p_data.pro_expires_at = pOverride.pro_expires_at;
-            if (pOverride.approved_expiry_date) p_data.approved_expiry_date = pOverride.approved_expiry_date;
-          }
-        } catch(err) {}
-        try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}
-      }
-      l(p_data);
-    } catch(err) {
-      console.warn('Profile fetch failure:', err);
-    }
-  },[]),
-  d=m.useCallback(async()=>{t&&await u(t.id)},[t,u]);
-
-  m.useEffect(()=>{
-    let isMounted = true;
-    const safetyTimer = setTimeout(() => {
-      if (isMounted) c(false);
-    }, 1500);
-
-    try {
-      L.auth.getSession().then(({data:j})=>{
-        if (!isMounted) return;
-        var f,g;
-        s(j.session);
-        n(((f=j.session)==null?void 0:f.user)??null);
-        if((g=j.session)!=null&&g.user){
-          u(j.session.user.id).catch(()=>{}).finally(()=>{ if(isMounted) c(false); });
-        } else {
-          if (isMounted) c(false);
-        }
-      }).catch(err => {
-        console.warn('getSession error:', err);
-        if (isMounted) c(false);
-      });
-    } catch(err) {
-      if (isMounted) c(false);
-    }
-
-    let unsub = null;
-    try {
-      const { data: w } = L.auth.onAuthStateChange((j,f)=>{
-        if (!isMounted) return;
-        s(f);
-        n((f==null?void 0:f.user)??null);
-        if(f!=null&&f.user){
-          u(f.user.id).catch(()=>{});
-        } else {
-          l(null);
-        }
-      });
-      unsub = w?.subscription?.unsubscribe;
-    } catch(err) {}
-
-    const handleProfileSync = () => {
-      if (t) u(t.id).catch(()=>{});
-    };
-    window.addEventListener("user_profile_updated", handleProfileSync);
-    window.addEventListener("user_status_changed", handleProfileSync);
-    window.addEventListener("recharge_status_updated", handleProfileSync);
-    window.addEventListener("storage", handleProfileSync);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(safetyTimer);
-      if(unsub) unsub();
-      window.removeEventListener("user_profile_updated", handleProfileSync);
-      window.removeEventListener("user_status_changed", handleProfileSync);
-      window.removeEventListener("recharge_status_updated", handleProfileSync);
-      window.removeEventListener("storage", handleProfileSync);
-    };
-  },[t,u]);
-
-  const h=async(w,j,f)=>{try{const{error:g}=await L.auth.signUp({email:w,password:j,options:{data:{name:f}}});return{error:(g==null?void 0:g.message)??null}}catch(e){return{error:e.message||'Sign up failed'}}},
-  p=async(w,j)=>{try{const{error:f}=await L.auth.signInWithPassword({email:w,password:j});return{error:(f==null?void 0:f.message)??null}}catch(e){return{error:e.message||'Sign in failed'}}},
-  v=async()=>{try{await L.auth.signOut()}catch(e){}l(null)},
-  x=async w=>{try{const{error:j}=await L.auth.resetPasswordForEmail(w);return{error:(j==null?void 0:j.message)??null}}catch(e){return{error:e.message||'Reset failed'}}};
-
-  
-  m.useEffect(function() {
-    if (t && i) {
-      try { checkProExpiryNotifications(t, i); } catch(e) {}
-      const interval = setInterval(function() {
-        try { checkProExpiryNotifications(t, i); } catch(e) {}
-      }, 3600000);
-      return function() { clearInterval(interval); };
-    }
-  }, [t, i]);
-  return a.jsx(Tp.Provider,{value:{user:t,session:r,profile:i,loading:o,signUp:h,signIn:p,signOut:v,resetPassword:x,refreshProfile:d},children:e})
-}
-function Ae(){const e=m.useContext(Tp);if(!e)throw new Error("useAuth must be used within AuthProvider");return e}/**
+function bw({children:e}){  const[t,n]=m.useState(null),  [r,s]=m.useState(null),  [i,l]=m.useState(null),  [o,c]=m.useState(!0),  u=m.useCallback(async w=>{    try {      let p_data=null;      try{const cached=localStorage.getItem("mlb_saved_profile_"+w);if(cached)p_data=JSON.parse(cached);}catch(e){}      try{        const{data:j,error:f}=await L.from("profiles").select("*").eq("id",w).maybeSingle();        if(!f&&j){p_data={...(p_data||{}),...j};}      }catch(err){}      try{        const{data:u_auth}=await L.auth.getUser();        const u_email=u_auth?.user?.email;        const u_name=u_auth?.user?.user_metadata?.name||u_email?.split('@')[0]||'User';        const isAdminUser = isUserAdmin({email:u_email});        if(!p_data){          p_data={id:w,email:u_email,name:u_name,role:isAdminUser?'super_admin':'user',account_status:'active',status:'active',is_pro:isAdminUser,pro_status:isAdminUser?'active':'inactive',created_at:new Date().toISOString()};          try{await L.from('profiles').upsert(p_data)}catch(err){}        }else{          if(isAdminUser){            p_data={...p_data,role:'super_admin',is_pro:!0,pro_status:'active'};            try{await L.from('profiles').update({role:'super_admin',is_pro:!0,pro_status:'active'}).eq('id',w)}catch(err){}          }        }      }catch(e){}      if(p_data){        try {          const syncState = await getCloudSyncState();          const userOverrides = syncState.userStatusOverrides || {};          const cleanEmail = (p_data.email || "").trim().toLowerCase();          const uCloud = userOverrides[p_data.id] || (cleanEmail ? userOverrides[cleanEmail] : null);          if (uCloud) {            if (uCloud.account_status !== undefined) p_data.account_status = uCloud.account_status;            if (uCloud.status !== undefined) p_data.status = uCloud.status;            if (uCloud.is_pro !== undefined) p_data.is_pro = uCloud.is_pro;            if (uCloud.pro_status !== undefined) p_data.pro_status = uCloud.pro_status;            if (uCloud.pro_expires_at) p_data.pro_expires_at = uCloud.pro_expires_at;            if (uCloud.approved_expiry_date) p_data.approved_expiry_date = uCloud.approved_expiry_date;          }        } catch(err) {}        try {          const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");          const sOverride = statusOverrides[p_data.id] || (p_data.email && (statusOverrides[p_data.email] || statusOverrides[p_data.email.toLowerCase().trim()]));          if (sOverride) {            const val = (typeof sOverride === "object" && sOverride.account_status) ? sOverride.account_status : sOverride;            if (typeof val === "string") {              p_data.account_status = val;              p_data.status = val;            }          }          const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");          const pOverride = proOverrides[p_data.id] || (p_data.email && (proOverrides[p_data.email] || proOverrides[p_data.email.toLowerCase().trim()]));          if (pOverride) {            if (pOverride.is_pro !== undefined) p_data.is_pro = pOverride.is_pro;            if (pOverride.pro_status !== undefined) p_data.pro_status = pOverride.pro_status;            if (pOverride.pro_expires_at) p_data.pro_expires_at = pOverride.pro_expires_at;            if (pOverride.approved_expiry_date) p_data.approved_expiry_date = pOverride.approved_expiry_date;          }        } catch(err) {}        try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}      }      l(p_data);    } catch(err) {      console.warn('Profile fetch failure:', err);    }  },[]),  d=m.useCallback(async()=>{t&&await u(t.id)},[t,u]);  m.useEffect(()=>{    let isMounted = true;    const safetyTimer = setTimeout(() => {      if (isMounted) c(false);    }, 1500);    try {      L.auth.getSession().then(({data:j})=>{        if (!isMounted) return;        var f,g;        s(j.session);        n(((f=j.session)==null?void 0:f.user)??null);        if((g=j.session)!=null&&g.user){          u(j.session.user.id).catch(()=>{}).finally(()=>{ if(isMounted) c(false); });        } else {          if (isMounted) c(false);        }      }).catch(err => {        console.warn('getSession error:', err);        if (isMounted) c(false);      });    } catch(err) {      if (isMounted) c(false);    }    let unsub = null;    try {      const { data: w } = L.auth.onAuthStateChange((j,f)=>{        if (!isMounted) return;        s(f);        n((f==null?void 0:f.user)??null);        if(f!=null&&f.user){          u(f.user.id).catch(()=>{});        } else {          l(null);        }      });      unsub = w?.subscription?.unsubscribe;    } catch(err) {}    const handleProfileSync = () => {      if (t) u(t.id).catch(()=>{});    };    const intervalSync = setInterval(() => {      if (isMounted && t) {        u(t.id).catch(()=>{});      }    }, 8000);    window.addEventListener("user_profile_updated", handleProfileSync);    window.addEventListener("user_status_changed", handleProfileSync);    window.addEventListener("recharge_status_updated", handleProfileSync);    window.addEventListener("storage", handleProfileSync);    window.addEventListener("focus", handleProfileSync);    document.addEventListener("visibilitychange", handleProfileSync);    return () => {      isMounted = false;      clearTimeout(safetyTimer);      clearInterval(intervalSync);      if(unsub) unsub();      window.removeEventListener("user_profile_updated", handleProfileSync);      window.removeEventListener("user_status_changed", handleProfileSync);      window.removeEventListener("recharge_status_updated", handleProfileSync);      window.removeEventListener("storage", handleProfileSync);      window.removeEventListener("focus", handleProfileSync);      document.removeEventListener("visibilitychange", handleProfileSync);    };  },[t,u]);  const h=async(w,j,f)=>{try{const{error:g}=await L.auth.signUp({email:w,password:j,options:{data:{name:f}}});return{error:(g==null?void 0:g.message)??null}}catch(e){return{error:e.message||'Sign up failed'}}},  p=async(w,j)=>{try{const{error:f}=await L.auth.signInWithPassword({email:w,password:j});return{error:(f==null?void 0:f.message)??null}}catch(e){return{error:e.message||'Sign in failed'}}},  v=async()=>{try{await L.auth.signOut()}catch(e){}l(null)},  x=async w=>{try{const{error:j}=await L.auth.resetPasswordForEmail(w);return{error:(j==null?void 0:j.message)??null}}catch(e){return{error:e.message||'Reset failed'}}};    m.useEffect(function() {    if (t && i) {      try { checkProExpiryNotifications(t, i); } catch(e) {}      const interval = setInterval(function() {        try { checkProExpiryNotifications(t, i); } catch(e) {}      }, 3600000);      return function() { clearInterval(interval); };    }  }, [t, i]);  return a.jsx(Tp.Provider,{value:{user:t,session:r,profile:i,loading:o,signUp:h,signIn:p,signOut:v,resetPassword:x,refreshProfile:d},children:e})}function Ae(){const e=m.useContext(Tp);if(!e)throw new Error("useAuth must be used within AuthProvider");return e}/**
  * @license lucide-react v0.446.0 - ISC
  *
  * This source code is licensed under the ISC license.
@@ -1043,34 +913,165 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
 
   const result = Object.values(map);
   return result.filter(c => c.is_active !== !1).sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
-}async function $c(){try{const{data:e,error:t}=await L.from("locations").select("*").eq("is_active",!0);if(!t&&e&&e.length>0){return e.sort((a,b)=>a.name.localeCompare(b.name))}if(t)throw t}catch(err){console.warn("Locations load err",err)}return []}async function Vp(e={}){
-  let list = [];
-  let deletedIds = [];
-  let overrides = {};
-  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}
-  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}
+}async function $c(){try{const{data:e,error:t}=await L.from("locations").select("*").eq("is_active",!0);if(!t&&e&&e.length>0){return e.sort((a,b)=>a.name.localeCompare(b.name))}if(t)throw t}catch(err){console.warn("Locations load err",err)}return []}let _cachedCloudSync = null;
+let _lastCloudSyncFetchTime = 0;
+const CLOUD_SYNC_CACHE_TTL = 5000;
+
+async function saveCloudSyncRecord(title, payload) {
   try {
-    const { data: sysRows } = await L.from("listings").select("title, description").in("title", ["[SYS_DELETED_LISTING]", "[SYS_APP_CONFIG]"]).order("created_at", { ascending: false }).limit(300);
+    let tUser = null;
+    try { const { data: t } = await L.auth.getUser(); if (t && t.user) tUser = t.user; } catch(e) {}
+    if (!tUser) {
+      try { const { data: s } = await L.auth.getSession(); if (s && s.session && s.session.user) tUser = s.session.user; } catch(e) {}
+    }
+    const isUUID = str => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const syncUid = (tUser?.id && isUUID(tUser.id)) ? tUser.id : "54d69b2e-76f7-410d-84fc-af00f7101786";
+    
+    await L.from("listings").insert({
+      user_id: syncUid,
+      title: title,
+      category_id: "3ed03846-ea53-4f52-9db5-17550b75f3f2",
+      location_id: "02ef9e15-c49f-459e-916c-2432e90dd230",
+      price: 0,
+      condition: "new",
+      description: JSON.stringify(payload),
+      phone: "9876543210",
+      whatsapp: "9876543210",
+      images: [],
+      status: "active",
+      is_featured: false
+    });
+    _lastCloudSyncFetchTime = 0;
+  } catch(err) {
+    console.warn("saveCloudSyncRecord error:", err);
+  }
+}
+
+async function getCloudSyncState(forceFresh = false) {
+  const now = Date.now();
+  if (!forceFresh && _cachedCloudSync && (now - _lastCloudSyncFetchTime < CLOUD_SYNC_CACHE_TTL)) {
+    return _cachedCloudSync;
+  }
+  
+  let deletedListingIds = [];
+  let listingStatusOverrides = {};
+  let userStatusOverrides = {};
+  let rechargeStatusOverrides = {};
+  let cloudConfig = {};
+
+  try { deletedListingIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(e) {}
+  try { listingStatusOverrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(e) {}
+  try { userStatusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}"); } catch(e) {}
+  try { rechargeStatusOverrides = JSON.parse(localStorage.getItem("recharge_status_overrides") || "{}"); } catch(e) {}
+
+  try {
+    const { data: sysRows } = await L.from("listings")
+      .select("title, description, created_at")
+      .in("title", [
+        "[SYS_DELETED_LISTING]",
+        "[SYS_LISTING_STATUS]",
+        "[SYS_USER_STATUS]",
+        "[SYS_RECHARGE_STATUS]",
+        "[SYS_APP_CONFIG]"
+      ])
+      .order("created_at", { ascending: false })
+      .limit(350);
+
     if (sysRows && Array.isArray(sysRows)) {
-      sysRows.forEach(function(row) {
+      sysRows.forEach(row => {
         if (!row || !row.description) return;
         try {
           const parsed = JSON.parse(row.description);
-          if (row.title === "[SYS_DELETED_LISTING]" && parsed && parsed.deleted_id) {
-            if (!deletedIds.includes(parsed.deleted_id)) deletedIds.push(parsed.deleted_id);
-          }
-          if (parsed && Array.isArray(parsed.deleted_listing_ids)) {
-            parsed.deleted_listing_ids.forEach(function(dId) {
-              if (dId && !deletedIds.includes(dId)) deletedIds.push(dId);
-            });
+          if (!parsed) return;
+          
+          if (row.title === "[SYS_DELETED_LISTING]") {
+            if (parsed.deleted_id && !deletedListingIds.includes(parsed.deleted_id)) {
+              deletedListingIds.push(parsed.deleted_id);
+            }
+            if (Array.isArray(parsed.deleted_listing_ids)) {
+              parsed.deleted_listing_ids.forEach(dId => {
+                if (dId && !deletedListingIds.includes(dId)) deletedListingIds.push(dId);
+              });
+            }
+          } else if (row.title === "[SYS_LISTING_STATUS]") {
+            const lId = parsed.listing_id;
+            if (lId && !listingStatusOverrides[lId]) {
+              listingStatusOverrides[lId] = {
+                status: parsed.status,
+                is_featured: parsed.is_featured,
+                updated_at: parsed.updated_at || row.created_at
+              };
+            }
+          } else if (row.title === "[SYS_USER_STATUS]") {
+            const uId = parsed.user_id;
+            const uEmail = (parsed.user_email || "").trim().toLowerCase();
+            const uData = {
+              account_status: parsed.account_status || parsed.status,
+              status: parsed.status || parsed.account_status,
+              is_pro: parsed.is_pro,
+              pro_status: parsed.pro_status,
+              pro_expires_at: parsed.pro_expires_at || parsed.approved_expiry_date,
+              approved_expiry_date: parsed.approved_expiry_date || parsed.pro_expires_at,
+              updated_at: parsed.updated_at || row.created_at
+            };
+            if (uId && !userStatusOverrides[uId]) userStatusOverrides[uId] = uData;
+            if (uEmail && !userStatusOverrides[uEmail]) userStatusOverrides[uEmail] = uData;
+          } else if (row.title === "[SYS_RECHARGE_STATUS]") {
+            const reqId = parsed.req_id;
+            const utr = parsed.utr;
+            if (reqId && !rechargeStatusOverrides[reqId]) rechargeStatusOverrides[reqId] = parsed;
+            if (utr && !rechargeStatusOverrides[utr]) rechargeStatusOverrides[utr] = parsed;
+            if (parsed.status === "approved" && (parsed.user_id || parsed.user_email)) {
+              const uId = parsed.user_id;
+              const uEmail = (parsed.user_email || "").trim().toLowerCase();
+              const exp = parsed.approved_expiry_date || new Date(Date.now() + 30 * 86400000).toISOString();
+              const proData = {
+                is_pro: true,
+                pro_status: "active",
+                pro_expires_at: exp,
+                approved_expiry_date: exp,
+                account_status: "active",
+                status: "active",
+                updated_at: parsed.reviewed_at || row.created_at
+              };
+              if (uId && !userStatusOverrides[uId]) userStatusOverrides[uId] = proData;
+              if (uEmail && !userStatusOverrides[uEmail]) userStatusOverrides[uEmail] = proData;
+            }
+          } else if (row.title === "[SYS_APP_CONFIG]") {
+            if (!cloudConfig.updated_at) cloudConfig = parsed;
           }
         } catch(e) {}
       });
-      try { localStorage.setItem("deleted_listing_ids", JSON.stringify(deletedIds)); } catch(e) {}
+
+      try { localStorage.setItem("deleted_listing_ids", JSON.stringify(deletedListingIds)); } catch(e) {}
+      try { localStorage.setItem("listing_status_overrides", JSON.stringify(listingStatusOverrides)); } catch(e) {}
+      try { localStorage.setItem("admin_status_overrides", JSON.stringify(userStatusOverrides)); } catch(e) {}
+      try { localStorage.setItem("recharge_status_overrides", JSON.stringify(rechargeStatusOverrides)); } catch(e) {}
     }
-  } catch(err) {}
+  } catch(err) {
+    console.warn("getCloudSyncState fetch error:", err);
+  }
+
+  _cachedCloudSync = {
+    deletedListingIds,
+    listingStatusOverrides,
+    userStatusOverrides,
+    rechargeStatusOverrides,
+    cloudConfig
+  };
+  _lastCloudSyncFetchTime = Date.now();
+  return _cachedCloudSync;
+}
+
+async function Vp(e={}){
+  let list = [];
+  let syncState = { deletedListingIds: [], listingStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const deletedIds = syncState.deletedListingIds || [];
+  const overrides = syncState.listingStatusOverrides || {};
+
   try {
-    let t = L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("status", "active").not("title", "like", "[SYS_%").not("title", "like", "SYS_%");
+    let t = L.from("listings").select(`*, category:categories(*), location:locations(*)`).not("title", "like", "[SYS_%").not("title", "like", "SYS_%");
     if (e.search) t = t.or(`title.ilike.%${e.search}%,description.ilike.%${e.search}%`);
     if (e.categoryId) t = t.eq("category_id", e.categoryId);
     if (e.locationId) t = t.eq("location_id", e.locationId);
@@ -1090,7 +1091,7 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
     if (!r && n && n.length > 0) {
       list = n;
     } else {
-      let tSimple = L.from("listings").select("*").eq("status", "active").not("title", "like", "[SYS_%").not("title", "like", "SYS_%");
+      let tSimple = L.from("listings").select("*").not("title", "like", "[SYS_%").not("title", "like", "SYS_%");
       if (e.categoryId) tSimple = tSimple.eq("category_id", e.categoryId);
       if (e.locationId) tSimple = tSimple.eq("location_id", e.locationId);
       const { data: nSimple } = await tSimple.order("created_at", { ascending: !1 });
@@ -1098,186 +1099,48 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
     }
   } catch(err) {
     try {
-      const { data: nSimple } = await L.from("listings").select("*").eq("status", "active").not("title", "like", "[SYS_%").not("title", "like", "SYS_%").order("created_at", { ascending: !1 }).limit(100);
+      const { data: nSimple } = await L.from("listings").select("*").not("title", "like", "[SYS_%").not("title", "like", "SYS_%").order("created_at", { ascending: !1 }).limit(100);
       if (nSimple && nSimple.length > 0) list = nSimple;
     } catch(err2) {}
   }
-  list.forEach(function(item) {
-    if (item && item.title === "[SYS_DELETED_LISTING]" && item.description) {
-      try {
-        const parsed = JSON.parse(item.description);
-        if (parsed && parsed.deleted_id && !deletedIds.includes(parsed.deleted_id)) {
-          deletedIds.push(parsed.deleted_id);
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+    if (saved && saved.length > 0) {
+      saved.forEach(function(sItem) {
+        if (!list.some(function(item) { return item.id === sItem.id; })) {
+          list.push(sItem);
         }
-      } catch(e) {}
+      });
     }
-  });
-  try {
-    const custom = JSON.parse(localStorage.getItem("user_custom_listings") || "[]")
-      .filter(l => l && (l.status === "active" || !l.status) && !deletedIds.includes(l.id));
-    const map = {};
-    list.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });
-    custom.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });
-    list = Object.values(map);
-  } catch(err) {}
-  let approvedTopProListingIds = new Set();
-  let pendingOrRejectedTopProIds = new Set();
-  try {
-    const allRechargeReqs = [
-      ...(JSON.parse(localStorage.getItem("all_recharge_requests") || "[]")),
-      ...(JSON.parse(localStorage.getItem("custom_recharge_requests") || "[]"))
-    ];
-    const reqOverrides = JSON.parse(localStorage.getItem("recharge_status_overrides") || "{}");
-    allRechargeReqs.forEach(r => {
-      if (r && reqOverrides[r.id]) {
-        if (reqOverrides[r.id].status) r.status = reqOverrides[r.id].status;
-      }
-    });
-    allRechargeReqs.forEach(r => {
-      if (r && (r.plan_id === "plan_single_top_pro" || r.amount === 30 || r.is_top_pro || r.type === "top_pro_boost")) {
-        if (r.status === "approved" && r.listing_id) {
-          approvedTopProListingIds.add(r.listing_id);
-        } else if ((r.status === "pending" || r.status === "rejected") && r.listing_id) {
-          pendingOrRejectedTopProIds.add(r.listing_id);
-        }
-      }
-    });
   } catch(e) {}
-  list.forEach(l => {
-    if (overrides[l.id]) {
-      if (overrides[l.id].status) l.status = overrides[l.id].status;
-      if (overrides[l.id].is_featured !== undefined) l.is_featured = overrides[l.id].is_featured;
+
+  const filteredRes = list.filter(function(item) {
+    if (!item || !item.id) return false;
+    const titleStr = String(item.title || "");
+    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_")) return false;
+    if (deletedIds.includes(item.id)) return false;
+
+    const override = overrides[item.id];
+    const currentStatus = (override && override.status) ? override.status : item.status;
+    if (currentStatus === "unpublished" || currentStatus === "rejected" || currentStatus === "deleted" || currentStatus === "paused") {
+      return false;
     }
-    if (approvedTopProListingIds.has(l.id)) {
-      if (!overrides[l.id] || overrides[l.id].is_featured !== false) {
-        l.is_featured = true;
-      }
-    } else if (pendingOrRejectedTopProIds.has(l.id)) {
-      if (!overrides[l.id] || overrides[l.id].is_featured === undefined) {
-        l.is_featured = false;
-      }
-    }
-    if (l.is_featured !== true) {
-      l.is_featured = false;
-    }
-    if (!l.location || !l.location.name || l.location.name === "Unknown") {
-      const formatted = formatListingLocation(l);
-      l.location = { id: l.location_id || "loc_1", name: formatted, state: l.state || "Meghalaya", district: l.district || "West Garo Hills", town: l.town || "Tura" };
-      l.location_name = formatted;
-    }
+    return currentStatus === "active" || !currentStatus;
   });
-  const isInvalidOrSys = (i) => {
-    if (!i || !i.id || !i.title) return true;
-    const titleStr = String(i.title).trim();
-    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_") || titleStr.includes("[SYS_") || titleStr.includes("SYS_DELETED_LISTING") || titleStr.includes("SYS_RECHARGE") || titleStr.includes("SYS_APP_CONFIG") || titleStr.includes("SYS_TOP_PRO")) return true;
-    if (i.status !== "active") return true;
-    if (i.is_deleted === true) return true;
-    if (deletedIds.includes(i.id)) return true;
-    return false;
-  };
-  let s = list.filter(i => !isInvalidOrSys(i));
-  if (e.search) {
-    const q = e.search.toLowerCase();
-    s = s.filter(i => (i.title && i.title.toLowerCase().includes(q)) || (i.description && i.description.toLowerCase().includes(q)) || (i.address && i.address.toLowerCase().includes(q)) || (i.town && i.town.toLowerCase().includes(q)) || (i.district && i.district.toLowerCase().includes(q)) || (i.state && i.state.toLowerCase().includes(q)) || (i.location_name && i.location_name.toLowerCase().includes(q)) || (i.location && i.location.name && i.location.name.toLowerCase().includes(q)));
-  }
-  if (e.categoryId) {
-    s = s.filter(i => i.category_id === e.categoryId || (i.category && i.category.id === e.categoryId));
-  }
-  if (e.locationId) {
-    s = s.filter(i => i.location_id === e.locationId || (i.location && i.location.id === e.locationId));
-  }
-  if (e.proOnly) {
-    s = s.filter(i => i.seller && Ct(i.seller));
-  }
-  const seenU = new Set();
-  s = s.filter(item => {
-    const timeKey = Math.floor(new Date(item.created_at || 0).getTime() / (1000 * 300));
-    const key = (item.user_id || "") + "___" + (item.title || "").trim().toLowerCase() + "___" + (item.price || 0) + "___" + timeKey;
-    if (seenU.has(key)) return false;
-    seenU.add(key);
-    return true;
+
+  return filteredRes.map(function(item) {
+    const override = overrides[item.id];
+    if (override) {
+      return {
+        ...item,
+        status: override.status || item.status,
+        is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
+      };
+    }
+    return item;
   });
-  return s;
-}async function o1(e){
-  if (!e) return null;
-  let deletedIds = [];
-  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}
-  if (deletedIds.includes(e)) return null;
-  let overrides = {};
-  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}
-  const isBadListing = (l) => {
-    if (!l || !l.id || !l.title) return true;
-    const titleStr = String(l.title).trim();
-    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_") || titleStr.includes("[SYS_") || titleStr.includes("SYS_DELETED_LISTING") || titleStr.includes("SYS_RECHARGE") || titleStr.includes("SYS_APP_CONFIG") || titleStr.includes("SYS_TOP_PRO")) return true;
-    if (l.status === "deleted" || l.status === "rejected" || l.is_deleted === true) return true;
-    if (deletedIds.includes(l.id)) return true;
-    return false;
-  };
-  try {
-    const saved = JSON.parse(localStorage.getItem("user_custom_listings")||"[]");
-    const found = saved.find(l=>l&&l.id===e&&!isBadListing(l));
-    if(found) {
-      if (overrides[found.id]) {
-        if (overrides[found.id].status) found.status = overrides[found.id].status;
-        if (overrides[found.id].is_featured !== undefined) found.is_featured = overrides[found.id].is_featured;
-      }
-      if (isBadListing(found)) return null;
-      if (!Array.isArray(found.images)) found.images = [];
-      if(!found.seller && found.user_id) {
-        try {
-          const profiles = await Ic();
-          found.seller = profiles.find(p=>p.id===found.user_id) || { id: found.user_id, name: "Seller" };
-        } catch(err) {
-          found.seller = { id: found.user_id, name: "Seller" };
-        }
-      }
-      return found;
-    }
-  } catch(err){}
-  try {
-    const {data:t, error:n} = await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("id",e).maybeSingle();
-    if(!n && t && !isBadListing(t)) {
-      if (overrides[t.id]) {
-        if (overrides[t.id].status) t.status = overrides[t.id].status;
-        if (overrides[t.id].is_featured !== undefined) t.is_featured = overrides[t.id].is_featured;
-      }
-      if (isBadListing(t)) return null;
-      if (!Array.isArray(t.images)) t.images = [];
-      if(!t.seller && t.user_id) {
-        try {
-          const { data: p } = await L.from("profiles").select("*").eq("id", t.user_id).maybeSingle();
-          if(p) t.seller = p;
-          else t.seller = { id: t.user_id, name: "Seller" };
-        } catch(err2) {
-          t.seller = { id: t.user_id, name: "Seller" };
-        }
-      }
-      return t;
-    }
-  } catch(err){}
-  try {
-    const {data:t2} = await L.from("listings").select("*").eq("id",e).maybeSingle();
-    if(t2 && !isBadListing(t2)) {
-      if (overrides[t2.id]) {
-        if (overrides[t2.id].status) t2.status = overrides[t2.id].status;
-        if (overrides[t2.id].is_featured !== undefined) t2.is_featured = overrides[t2.id].is_featured;
-      }
-      if (isBadListing(t2)) return null;
-      if (!Array.isArray(t2.images)) t2.images = [];
-      t2.seller = { id: t2.user_id, name: "Seller" };
-      return t2;
-    }
-  } catch(err){}
-  return null;
-}async function qp(e){  let list=[];  let deletedIds = [];  let overrides = {};  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try{    const{data:t,error:n}=await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});    if(!n&&t)list=t  }catch(err){}  if(!list||list.length===0){    try{      const{data:t2}=await L.from("listings").select("*").eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});      if(t2)list=t2    }catch(err){}  }  try{    const saved=JSON.parse(localStorage.getItem("user_custom_listings")||"[]");    const userSaved=saved.filter(l=>l&&l.user_id===e&&l.status!=="deleted"&&!deletedIds.includes(l.id));    const map={};    list.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    userSaved.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    const res = Object.values(map);    res.forEach(l => {      if (overrides[l.id]) {        if (overrides[l.id].status) l.status = overrides[l.id].status;        if (overrides[l.id].is_featured !== undefined) l.is_featured = overrides[l.id].is_featured;      }    });    const filteredRes = res.filter(l => l && !deletedIds.includes(l.id) && l.status !== "deleted" && !String(l.title || "").startsWith("[SYS_") && !String(l.title || "").includes("SYS_DELETED_LISTING")).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
-    const seenQ = new Set();
-    return filteredRes.filter(item => {
-      const timeKey = Math.floor(new Date(item.created_at || 0).getTime() / (1000 * 300));
-      const key = (item.title || "").trim().toLowerCase() + "___" + (item.price || 0) + "___" + timeKey;
-      if (seenQ.has(key)) return false;
-      seenQ.add(key);
-      return true;
-    });  }catch(err){    return list.filter(l => l && !deletedIds.includes(l.id) && l.status !== "deleted");  }}async function syncLocalListingsToSupabase(){try{const{data:authData}=await L.auth.getUser();if(!authData||!authData.user)return;const userId=authData.user.id;const delList=JSON.parse(localStorage.getItem("deleted_listing_ids")||"[]");const localList=JSON.parse(localStorage.getItem("user_custom_listings")||"[]");const unsynced=localList.filter(l=>l&&(l.user_id===userId||!l.user_id)&&l.status!=="deleted"&&!delList.includes(l.id)&&!l._synced_to_supabase);if(unsynced.length===0)return;const isUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;let locList=[];try{locList=await $c();}catch(e){}for(const item of unsynced){let locId=(item.location_id&&isUuid.test(item.location_id))?item.location_id:null;if(!locId&&locList.length>0){const match=locList.find(l=>l&&l.name&&(l.name.toLowerCase().includes((item.town||"").toLowerCase())||l.name.toLowerCase().includes((item.district||"").toLowerCase())||l.name.toLowerCase().includes((item.state||"").toLowerCase())));if(match&&match.id&&isUuid.test(match.id))locId=match.id;}if(!locId)locId="27d3e482-b66a-41d5-8844-366b1f08062a";const payload={user_id:userId,title:item.title,category_id:(item.category_id&&isUuid.test(item.category_id))?item.category_id:"3ed03846-ea53-4f52-9db5-17550b75f3f2",location_id:locId,price:Number(item.price)||0,condition:item.condition||"used",description:item.description||"",phone:item.phone||"",whatsapp:item.whatsapp||item.phone||"",images:item.images||[],status:"active",is_featured:!!item.is_featured};try{const{data:ins,error:err}=await L.from("listings").insert(payload).select("*, category:categories(*), location:locations(*)").single();if(!err&&ins){item._synced_to_supabase=!0;item.id=ins.id;}}catch(err2){}}localStorage.setItem("user_custom_listings",JSON.stringify(localList));}catch(e){}}
+}
 async function syncCloudConfig(updates) {
   try {
     let tUser = null;
@@ -1672,6 +1535,10 @@ async function u1(e){  try {    const delList = JSON.parse(localStorage.getItem(
     const { data: e, error: t } = await L.from("profiles").select("*").order("created_at", { ascending: !1 });
     if (!t && e && Array.isArray(e) && e.length > 0) list = e;
   } catch(err) {}
+  
+  let syncState = { userStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const cloudUserOverrides = syncState.userStatusOverrides || {};
 
   const defaultUsers = [
     {
@@ -1742,7 +1609,6 @@ async function u1(e){  try {    const delList = JSON.parse(localStorage.getItem(
       created_at: "2026-08-27T12:02:00.000Z"
     }
   ];
-
   const emailMap = new Map();
   const idMap = new Map();
   const mergeUser = (existing, u) => {
@@ -1761,250 +1627,108 @@ async function u1(e){  try {    const delList = JSON.parse(localStorage.getItem(
       account_status: u.account_status || existing.account_status || "active"
     };
   };
-
   defaultUsers.forEach(u => {
     if (!u) return;
     const cleanEmail = (u.email || "").trim().toLowerCase();
     if (cleanEmail) emailMap.set(cleanEmail, { ...u });
     else if (u.id) idMap.set(u.id, { ...u });
   });
-
   list.forEach(u => {
     if (!u) return;
     const cleanEmail = (u.email || "").trim().toLowerCase();
-    if (cleanEmail) {
-      const ex = emailMap.get(cleanEmail);
-      emailMap.set(cleanEmail, mergeUser(ex, u));
-    } else if (u.id) {
-      const ex = idMap.get(u.id);
-      idMap.set(u.id, mergeUser(ex, u));
+    if (cleanEmail && emailMap.has(cleanEmail)) {
+      emailMap.set(cleanEmail, mergeUser(emailMap.get(cleanEmail), u));
+    } else if (u.id && idMap.has(u.id)) {
+      idMap.set(u.id, mergeUser(idMap.get(u.id), u));
+    } else {
+      if (cleanEmail) emailMap.set(cleanEmail, { ...u });
+      else if (u.id) idMap.set(u.id, { ...u });
     }
   });
 
   try {
-    const rawLocal = JSON.parse(localStorage.getItem("admin_users") || "[]");
-    if (Array.isArray(rawLocal)) {
-      rawLocal.forEach(u => {
+    const saved = JSON.parse(localStorage.getItem("admin_users") || "[]");
+    if (Array.isArray(saved)) {
+      saved.forEach(u => {
         if (!u) return;
         const cleanEmail = (u.email || "").trim().toLowerCase();
-        if (cleanEmail) {
-          const ex = emailMap.get(cleanEmail);
-          emailMap.set(cleanEmail, mergeUser(ex, u));
-        } else if (u.id) {
-          const ex = idMap.get(u.id);
-          idMap.set(u.id, mergeUser(ex, u));
+        if (cleanEmail && emailMap.has(cleanEmail)) {
+          emailMap.set(cleanEmail, mergeUser(emailMap.get(cleanEmail), u));
+        } else if (u.id && idMap.has(u.id)) {
+          idMap.set(u.id, mergeUser(idMap.get(u.id), u));
+        } else {
+          if (cleanEmail) emailMap.set(cleanEmail, { ...u });
+          else if (u.id) idMap.set(u.id, { ...u });
         }
       });
     }
-  } catch(e) {}
+  } catch(err) {}
 
-  const seenEmails = new Set();
-  const seenIds = new Set();
-  const dedupedUsers = [];
-
-  emailMap.forEach(u => {
-    if (!u) return;
+  const merged = Array.from(new Set([...emailMap.values(), ...idMap.values()]));
+  return merged.map(u => {
     const cleanEmail = (u.email || "").trim().toLowerCase();
-    if (!cleanEmail || seenEmails.has(cleanEmail)) return;
-    seenEmails.add(cleanEmail);
-    if (u.id) seenIds.add(u.id);
-    dedupedUsers.push(u);
+    const uCloud = (u.id && cloudUserOverrides[u.id]) || (cleanEmail && cloudUserOverrides[cleanEmail]);
+    if (uCloud) {
+      return {
+        ...u,
+        account_status: uCloud.account_status !== undefined ? uCloud.account_status : u.account_status,
+        status: uCloud.status !== undefined ? uCloud.status : u.status,
+        is_pro: uCloud.is_pro !== undefined ? uCloud.is_pro : u.is_pro,
+        pro_status: uCloud.pro_status !== undefined ? uCloud.pro_status : u.pro_status,
+        pro_expires_at: uCloud.pro_expires_at || u.pro_expires_at,
+        approved_expiry_date: uCloud.approved_expiry_date || u.approved_expiry_date
+      };
+    }
+    return u;
   });
-
-  idMap.forEach(u => {
-    if (!u) return;
-    const cleanEmail = (u.email || "").trim().toLowerCase();
-    const uId = u.id || u.user_id;
-    if (cleanEmail && seenEmails.has(cleanEmail)) return;
-    if (uId && seenIds.has(uId)) return;
-    if (cleanEmail) seenEmails.add(cleanEmail);
-    if (uId) seenIds.add(uId);
-    dedupedUsers.push(u);
-  });
-
-  // Apply Status Overrides
-  try {
-    const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");
-    dedupedUsers.forEach(u => {
-      const uEmail = (u.email || "").trim().toLowerCase();
-      const st = (u.id && statusOverrides[u.id]) || (uEmail && statusOverrides[uEmail]);
-      if (st) {
-        u.account_status = st;
-        u.status = st;
-      }
-    });
-  } catch(e) {}
-
-  // Apply Pro Overrides
-  try {
-    const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || localStorage.getItem("pro_status_overrides") || "{}");
-    dedupedUsers.forEach(u => {
-      const uEmail = (u.email || "").trim().toLowerCase();
-      const ov = (u.id && proOverrides[u.id]) || (uEmail && proOverrides[uEmail]);
-      if (ov) {
-        u.is_pro = ov.is_pro;
-        u.pro_status = ov.pro_status;
-        u.pro_expires_at = ov.pro_expires_at;
-        u.pro_expiry_at = ov.pro_expires_at;
-        u.approved_expiry_date = ov.pro_expires_at;
-      }
-    });
-  } catch(e) {}
-
-  // Apply Role Overrides
-  try {
-    const roleOverrides = JSON.parse(localStorage.getItem("admin_role_overrides") || "{}");
-    dedupedUsers.forEach(u => {
-      const uEmail = (u.email || "").trim().toLowerCase();
-      const r = (u.id && roleOverrides[u.id]) || (uEmail && roleOverrides[uEmail]);
-      if (r) {
-        u.role = r;
-      }
-    });
-  } catch(e) {}
-
-  try {
-    localStorage.setItem("admin_users", JSON.stringify(dedupedUsers));
-  } catch(e) {}
-
-  return dedupedUsers;
 }
-async function Gp(){  let list=[];  let deletedIds = [];  let overrides = {};  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try {    const { data: sysRows } = await L.from("listings").select("title, description").in("title", ["[SYS_DELETED_LISTING]", "[SYS_APP_CONFIG]"]).order("created_at", { ascending: false }).limit(200);    if (sysRows && Array.isArray(sysRows)) {      sysRows.forEach(function(row) {        if (!row || !row.description) return;        try {          const parsed = JSON.parse(row.description);          if (row.title === "[SYS_DELETED_LISTING]" && parsed && parsed.deleted_id) {            if (!deletedIds.includes(parsed.deleted_id)) deletedIds.push(parsed.deleted_id);          }          if (parsed && Array.isArray(parsed.deleted_listing_ids)) {            parsed.deleted_listing_ids.forEach(function(dId) {              if (dId && !deletedIds.includes(dId)) deletedIds.push(dId);            });          }        } catch(e) {}      });      try { localStorage.setItem("deleted_listing_ids", JSON.stringify(deletedIds)); } catch(e) {}    }  } catch(err) {}  try{    const{data:e,error:t}=await L.from("listings").select("*, category:categories(*), location:locations(*)").neq("status","deleted").not("title","like","[SYS_%").not("title","like","SYS_%").order("created_at",{ascending:!1});    if(!t&&e&&e.length>0) list=e;  }catch(err){}  if(!list||list.length===0){    try{      const{data:e2}=await L.from("listings").select("*").neq("status","deleted").not("title","like","[SYS_%").not("title","like","SYS_%").order("created_at",{ascending:!1});      if(e2&&e2.length>0) list=e2;    }catch(err2){}  }  try{    const saved=JSON.parse(localStorage.getItem("user_custom_listings")||"[]");    if(saved&&saved.length>0){      saved.forEach(function(sItem) {        if (!list.some(function(item) { return item.id === sItem.id; })) {          list.push(sItem);        }      });    }  }catch(err){}  list = list.filter(function(item) {    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && item.status !== "deleted" && !deletedIds.includes(item.id);  });  return list.map(function(item) {    if (overrides[item.id]) {      return Object.assign({}, item, overrides[item.id]);    }    return item;  });}
-const DEFAULT_RECHARGE_REQUESTS = [
-  {
-    id: "req_top_pro_pending_1",
-    user_id: "93754ba4-d171-44a3-b6f5-1166fd9c718e",
-    user_name: "Abcdj Merchant",
-    user_email: "abcdj_store@gmail.com",
-    user: { id: "93754ba4-d171-44a3-b6f5-1166fd9c718e", name: "Abcdj Merchant", email: "abcdj_store@gmail.com" },
-    plan_id: "plan_single_top_pro",
-    plan: { id: "plan_single_top_pro", name: "Top PRO Boost", price: 30, duration_days: 30 },
-    amount: 10,
-    utr: "600912345678",
-    payment_proof_url: "",
-    listing_id: "list_demo_boost_1",
-    listing_title: "Fresh Organic Vegetables & Local Produce",
-    listing_image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=60",
-    location: "Tura Super Market, West Garo Hills",
-    price: "150",
-    status: "pending",
-    type: "top_pro_boost",
-    is_top_pro: true,
-    submitted_at: "2026-08-28T09:15:00.000Z",
-    created_at: "2026-08-28T09:15:00.000Z"
-  },
-  {
-    id: "req_monthly_pro_1",
-    user_id: "5d813f5a-506e-424b-950f-477425d42d06",
-    user_name: "Silgrak Marak",
-    user_email: "silgrak1309@gmail.com",
-    user: { id: "5d813f5a-506e-424b-950f-477425d42d06", name: "Silgrak Marak", email: "silgrak1309@gmail.com" },
-    plan_id: "85d63e96-1537-4194-8935-5c19c08ea200",
-    plan: { id: "85d63e96-1537-4194-8935-5c19c08ea200", name: "Monthly PRO", price: 112.5, duration_days: 30 },
-    amount: 50,
-    utr: "524681903421",
-    payment_proof_url: "",
-    status: "pending",
-    submitted_at: "2026-08-27T08:30:00.000Z",
-    created_at: "2026-08-27T08:30:00.000Z"
-  },
-  {
-    id: "req_monthly_pro_2",
-    user_id: "user_sengmi_12",
-    user_name: "Sengmi Marak",
-    user_email: "sengmimarak12@gmail.com",
-    user: { id: "user_sengmi_12", name: "Sengmi Marak", email: "sengmimarak12@gmail.com" },
-    plan_id: "85d63e96-1537-4194-8935-5c19c08ea200",
-    plan: { id: "85d63e96-1537-4194-8935-5c19c08ea200", name: "Monthly PRO", price: 112.5, duration_days: 30 },
-    amount: 50,
-    utr: "524681998877",
-    payment_proof_url: "",
-    status: "approved",
-    submitted_at: "2026-08-26T14:15:00.000Z",
-    created_at: "2026-08-26T14:15:00.000Z",
-    approved_expiry_date: "2026-09-26T14:15:00.000Z"
-  },
-  {
-    id: "req_top_pro_1",
-    user_id: "user_marakmy01",
-    user_name: "marakmy01",
-    user_email: "marakmy01@gmail.com",
-    user: { id: "user_marakmy01", name: "marakmy01", email: "marakmy01@gmail.com" },
-    plan_id: "plan_single_top_pro",
-    plan: { id: "plan_single_top_pro", name: "Top PRO Boost", price: 30, duration_days: 30 },
-    amount: 10,
-    utr: "600909209678",
-    payment_proof_url: "",
-    listing_id: "cb8715fd-1a44-4587-b87a-7565510d2af8",
-    listing_title: "Top PRO Listing",
-    status: "approved",
-    type: "top_pro_boost",
-    is_top_pro: true,
-    submitted_at: "2026-08-25T04:43:00.000Z",
-    created_at: "2026-08-25T04:43:00.000Z",
-    approved_expiry_date: "2026-09-25T04:43:00.000Z"
-  },
-  {
-    id: "req_top_pro_2",
-    user_id: "5d813f5a-506e-424b-950f-477425d42d06",
-    user_name: "Silgrak Marak",
-    user_email: "silgrak1309@gmail.com",
-    user: { id: "5d813f5a-506e-424b-950f-477425d42d06", name: "Silgrak Marak", email: "silgrak1309@gmail.com" },
-    plan_id: "plan_single_top_pro",
-    plan: { id: "plan_single_top_pro", name: "Top PRO Boost", price: 20, duration_days: 30 },
-    amount: 20,
-    utr: "Rryryuu798",
-    payment_proof_url: "https://haaatxxndggdfwizgmlo.supabase.co/storage/v1/object/public/media/5d813f5a-506e-424b-950f-477425d42d06/1787611691596-thyqe11b1rh.jpg",
-    listing_id: "236e769d-72d6-47ae-866f-2ac57339c35e",
-    listing_title: "Professional Electronic Repairing & Servicing",
-    listing_image: "https://haaatxxndggdfwizgmlo.supabase.co/storage/v1/object/public/media/5d813f5a-506e-424b-950f-477425d42d06/1787611691596-thyqe11b1rh.jpg",
-    location: "Rongara, South Garo Hills, Meghalaya",
-    status: "approved",
-    type: "top_pro_boost",
-    is_top_pro: true,
-    submitted_at: "2026-08-25T04:19:00.000Z",
-    created_at: "2026-08-25T04:19:00.000Z",
-    approved_expiry_date: "2026-09-25T04:19:00.000Z"
-  },
-  {
-    id: "req_top_pro_rej1",
-    user_id: "user_test_rej1",
-    user_name: "Silgrak Marak",
-    user_email: "silgrak1309@gmail.com",
-    user: { id: "user_test_rej1", name: "Silgrak Marak", email: "silgrak1309@gmail.com" },
-    plan_id: "plan_single_top_pro",
-    plan: { id: "plan_single_top_pro", name: "Top PRO Boost", price: 30, duration_days: 30 },
-    amount: 10,
-    utr: "600909000000",
-    payment_proof_url: "",
-    status: "rejected",
-    type: "top_pro_boost",
-    is_top_pro: true,
-    rejection_reason: "Invalid UTR or verification failed",
-    submitted_at: "2026-08-24T18:30:00.000Z",
-    created_at: "2026-08-24T18:30:00.000Z"
-  },
-  {
-    id: "req_top_pro_rej2",
-    user_id: "user_test_rej2",
-    user_name: "marakmy01",
-    user_email: "marakmy01@gmail.com",
-    user: { id: "user_test_rej2", name: "marakmy01", email: "marakmy01@gmail.com" },
-    plan_id: "plan_single_top_pro",
-    plan: { id: "plan_single_top_pro", name: "Top PRO Boost", price: 30, duration_days: 30 },
-    amount: 10,
-    utr: "600909111111",
-    payment_proof_url: "",
-    status: "rejected",
-    type: "top_pro_boost",
-    is_top_pro: true,
-    rejection_reason: "Duplicate request reference",
-    submitted_at: "2026-08-24T12:00:00.000Z",
-    created_at: "2026-08-24T12:00:00.000Z"
-  }
-];
 
-/* duplicate isUserAdmin removed */
+async function Gp(){
+  let list = [];
+  let syncState = { deletedListingIds: [], listingStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const deletedIds = syncState.deletedListingIds || [];
+  const overrides = syncState.listingStatusOverrides || {};
+
+  try {
+    const { data: e, error: t } = await L.from("listings").select("*, category:categories(*), location:locations(*)").not("title", "like", "[SYS_%").not("title", "like", "SYS_%").order("created_at", { ascending: !1 });
+    if (!t && e && e.length > 0) list = e;
+  } catch(err) {}
+  if (!list || list.length === 0) {
+    try {
+      const { data: e2 } = await L.from("listings").select("*").not("title", "like", "[SYS_%").not("title", "like", "SYS_%").order("created_at", { ascending: !1 });
+      if (e2 && e2.length > 0) list = e2;
+    } catch(err2) {}
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+    if (saved && saved.length > 0) {
+      saved.forEach(function(sItem) {
+        if (!list.some(function(item) { return item.id === sItem.id; })) {
+          list.push(sItem);
+        }
+      });
+    }
+  } catch(err) {}
+
+  list = list.filter(function(item) {
+    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && item.status !== "deleted" && !deletedIds.includes(item.id);
+  });
+
+  return list.map(function(item) {
+    const override = overrides[item.id];
+    if (override) {
+      return {
+        ...item,
+        status: override.status || item.status,
+        is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
+      };
+    }
+    return item;
+  });
+}
+
 async function Jp(){
   let dbList = [];
   try {
@@ -2018,202 +1742,44 @@ async function Jp(){
     } catch(err) {}
   }
 
-  const cloudReqs = [];
-  const cloudStatusOverrides = {};
-  try {
-    const { data: sysRows } = await L.from("listings")
-      .select("*")
-      .in("title", ["[SYS_RECHARGE_REQUEST]", "[SYS_TOP_PRO_REQUEST]", "[SYS_RECHARGE_STATUS]"])
-      .order("created_at", { ascending: !1 });
-    if (sysRows && Array.isArray(sysRows)) {
-      sysRows.forEach(row => {
-        if (!row || !row.description) return;
-        try {
-          const parsed = JSON.parse(row.description);
-          if (row.title === "[SYS_RECHARGE_STATUS]") {
-            if (parsed && parsed.req_id) cloudStatusOverrides[parsed.req_id] = parsed;
-            if (parsed && parsed.utr) cloudStatusOverrides[parsed.utr] = parsed;
-          } else if (row.title === "[SYS_RECHARGE_REQUEST]" || row.title === "[SYS_TOP_PRO_REQUEST]") {
-            if (parsed && (parsed.id || parsed.utr)) {
-              cloudReqs.push(parsed);
-            }
-          }
-        } catch(e) {}
-      });
+  let syncState = { rechargeStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const cloudStatusOverrides = syncState.rechargeStatusOverrides || {};
+
+  let localList = [];
+  try { localList = JSON.parse(localStorage.getItem("all_recharge_requests") || "[]"); } catch(err) {}
+
+  const mergedMap = new Map();
+  dbList.forEach(r => {
+    if (!r) return;
+    const key = r.id || r.utr;
+    if (key) mergedMap.set(key, r);
+  });
+  localList.forEach(r => {
+    if (!r) return;
+    const key = r.id || r.utr;
+    if (key) {
+      const existing = mergedMap.get(key);
+      mergedMap.set(key, { ...(existing || {}), ...r });
     }
-  } catch(err) {}
+  });
 
-  try {
-    const local = __safeArr("all_recharge_requests");
-    const customLocal = __safeArr("custom_recharge_requests");
-    const userLocal = __safeArr("user_recharge_requests");
-    const reqOverrides = __safeObj("recharge_status_overrides");
-        
-    let plans = [];
-    try { plans = await Xp(); } catch(e3) {}
-    if (!Array.isArray(plans)) plans = [];
-        
-    let profilesList = [];
-    try {
-      const { data: pList } = await L.from("profiles").select("*");
-      if (pList && Array.isArray(pList) && pList.length > 0) profilesList = pList;
-    } catch(e4) {}
-        
-    const profMap = {};
-    profilesList.forEach(p => {
-      if (p && p.id) profMap[p.id] = p;
-      if (p && p.email) profMap[p.email.toLowerCase().trim()] = p;
-    });
+  const finalReqs = Array.from(mergedMap.values()).map(r => {
+    const override = (r.id && cloudStatusOverrides[r.id]) || (r.utr && cloudStatusOverrides[r.utr]);
+    if (override) {
+      return {
+        ...r,
+        status: override.status || r.status,
+        approved_expiry_date: override.approved_expiry_date || r.approved_expiry_date,
+        rejection_reason: override.rejection_reason || r.rejection_reason
+      };
+    }
+    return r;
+  });
 
-    let listingsList = [];
-    try { listingsList = await Gp(); } catch(e5) {}
-    if (!Array.isArray(listingsList)) listingsList = [];
-    const listingMap = {};
-    listingsList.forEach(l => {
-      if (l && l.id) listingMap[l.id] = l;
-      if (l && l.title) listingMap[l.title.toLowerCase().trim()] = l;
-    });
-
-    const enrich = r => {
-      if (!r) return r;
-      r.created_at = r.created_at || r.submitted_at || new Date().toISOString();
-      r.submitted_at = r.submitted_at || r.created_at;
-      let proofUrl = r.payment_proof_url || "";
-      let meta = null;
-      if (typeof proofUrl === "string") {
-        if (proofUrl.includes("#meta:")) {
-          const parts = proofUrl.split("#meta:");
-          proofUrl = parts[0];
-          try { meta = JSON.parse(parts[1]); } catch(e) {}
-        } else if (proofUrl.startsWith("meta:")) {
-          const jsonStr = proofUrl.substring(5);
-          proofUrl = "";
-          try { meta = JSON.parse(jsonStr); } catch(e) {}
-        }
-      }
-      r.payment_proof_url = proofUrl;
-      if (meta) {
-        if (meta.listing_id && !r.listing_id) r.listing_id = meta.listing_id;
-        if (meta.listing_title && !r.listing_title) r.listing_title = meta.listing_title;
-        if (meta.listing_image && !r.listing_image) r.listing_image = meta.listing_image;
-        if (meta.price && !r.price) r.price = meta.price;
-        if (meta.category && !r.category) r.category = meta.category;
-        if (meta.location && !r.location) r.location = meta.location;
-        if (meta.user_name && !r.user_name) r.user_name = meta.user_name;
-        if (meta.user_email && !r.user_email) r.user_email = meta.user_email;
-        if (meta.user_phone && !r.user_phone) r.user_phone = meta.user_phone;
-        if (meta.is_top_pro !== undefined) r.is_top_pro = meta.is_top_pro;
-        if (meta.type) r.type = meta.type;
-        if (meta.plan_id && !r.plan_id) r.plan_id = meta.plan_id;
-        if (meta.plan_name && !r.plan_name) r.plan_name = meta.plan_name;
-      }
-      const isTop = r.is_top_pro === true || r.type === "top_pro_boost" || r.plan_id === "plan_single_top_pro" || Number(r.amount) === 30 || Number(r.amount) === 10 || Number(r.amount) === 20 || Boolean(r.listing_id || r.listing_title);
-      r.is_top_pro = isTop;
-      r.type = isTop ? "top_pro_boost" : "monthly_plan";
-      if (!r.plan && r.plan_id && plans) r.plan = plans.find(p => p && p.id === r.plan_id);
-      if (!r.plan) {
-        if (isTop) {
-          r.plan = { id: "plan_single_top_pro", name: "Top PRO Boost", price: Number(r.amount) || 30, duration_days: 30 };
-        } else if (Number(r.amount) >= 300) {
-          r.plan = { id: "plan_1y", name: "1 Year PRO", price: Number(r.amount) || 350, duration_days: 365 };
-        } else if (Number(r.amount) >= 180) {
-          r.plan = { id: "plan_6m", name: "6 Months PRO", price: Number(r.amount) || 200, duration_days: 180 };
-        } else if (Number(r.amount) >= 115) {
-          r.plan = { id: "plan_3m", name: "3 Months PRO", price: Number(r.amount) || 120, duration_days: 90 };
-        } else {
-          r.plan = { id: "plan_1m", name: "Monthly PRO (1 Month)", price: Number(r.amount) || 112.5, duration_days: 30 };
-        }
-      }
-      const pKey = (r.user_email || "").trim().toLowerCase();
-      const foundP = (r.user_id && profMap[r.user_id]) || (pKey && profMap[pKey]);
-      const resolvedName = r.user?.name && r.user.name !== "Unknown user"
-        ? r.user.name
-        : (foundP?.name || foundP?.full_name || r.user_name || foundP?.email?.split("@")[0] || r.user_email?.split("@")[0] || (r.user_id ? "Member (" + String(r.user_id).slice(-6) + ")" : "User"));
-      const resolvedEmail = r.user?.email || foundP?.email || r.user_email || "";
-      const resolvedPhone = r.user?.phone || foundP?.phone || foundP?.whatsapp || r.user_phone || "";
-      r.user = { id: r.user_id || foundP?.id || "user", name: resolvedName, email: resolvedEmail, phone: resolvedPhone };
-      r.user_name = resolvedName;
-      r.user_email = resolvedEmail;
-      r.user_phone = resolvedPhone;
-      if (r.listing_id && listingMap[r.listing_id]) {
-        const listMatch = listingMap[r.listing_id];
-        r.listing_title = r.listing_title || listMatch.title || "";
-        r.listing_image = r.listing_image || (listMatch.images && listMatch.images[0]) || "";
-        r.price = r.price || listMatch.price || "";
-        r.location = r.location || (listMatch.location?.name) || "";
-        r.category = r.category || (listMatch.category?.name) || "";
-      } else if (r.listing_title && listingMap[r.listing_title.toLowerCase().trim()]) {
-        const listMatch = listingMap[r.listing_title.toLowerCase().trim()];
-        r.listing_id = r.listing_id || listMatch.id || "";
-        r.listing_image = r.listing_image || (listMatch.images && listMatch.images[0]) || "";
-        r.price = r.price || listMatch.price || "";
-        r.location = r.location || (listMatch.location?.name) || "";
-        r.category = r.category || (listMatch.category?.name) || "";
-      }
-      return r;
-    };
-
-    const combined = [
-      ...(Array.isArray(cloudReqs) ? cloudReqs : []),
-      ...(Array.isArray(dbList) ? dbList : []),
-      ...(Array.isArray(customLocal) ? customLocal : []),
-      ...(Array.isArray(userLocal) ? userLocal : []),
-      ...(Array.isArray(local) ? local : []),
-      ...(typeof DEFAULT_RECHARGE_REQUESTS !== "undefined" && Array.isArray(DEFAULT_RECHARGE_REQUESTS) ? DEFAULT_RECHARGE_REQUESTS : [])
-    ];
-
-    const sortedCombined = combined
-      .filter(Boolean)
-      .map(raw => enrich({ ...raw }));
-
-    const mergedList = [];
-    const seenReqIds = new Set();
-    const seenUtrs = new Set();
-
-    sortedCombined.forEach(r => {
-      if (!r || !r.id) return;
-      const cleanUtr = (r.utr || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-      const hasValidUtr = cleanUtr.length >= 6 && cleanUtr !== "undefined" && cleanUtr !== "null";
-      if (seenReqIds.has(r.id)) return;
-      if (hasValidUtr && seenUtrs.has(cleanUtr)) return;
-      seenReqIds.add(r.id);
-      if (hasValidUtr) seenUtrs.add(cleanUtr);
-      mergedList.push(r);
-    });
-
-    mergedList.forEach(r => {
-      if (cloudStatusOverrides[r.id]) {
-        if (cloudStatusOverrides[r.id].status) r.status = cloudStatusOverrides[r.id].status;
-        if (cloudStatusOverrides[r.id].rejection_reason) r.rejection_reason = cloudStatusOverrides[r.id].rejection_reason;
-        if (cloudStatusOverrides[r.id].approved_expiry_date) r.approved_expiry_date = cloudStatusOverrides[r.id].approved_expiry_date;
-      }
-      if (r.utr && cloudStatusOverrides[r.utr]) {
-        if (cloudStatusOverrides[r.utr].status) r.status = cloudStatusOverrides[r.utr].status;
-        if (cloudStatusOverrides[r.utr].rejection_reason) r.rejection_reason = cloudStatusOverrides[r.utr].rejection_reason;
-        if (cloudStatusOverrides[r.utr].approved_expiry_date) r.approved_expiry_date = cloudStatusOverrides[r.utr].approved_expiry_date;
-      }
-      if (reqOverrides[r.id]) {
-        if (reqOverrides[r.id].status) r.status = reqOverrides[r.id].status;
-        if (reqOverrides[r.id].rejection_reason) r.rejection_reason = reqOverrides[r.id].rejection_reason;
-      }
-      if (r.utr && reqOverrides[r.utr]) {
-        if (reqOverrides[r.utr].status) r.status = reqOverrides[r.utr].status;
-        if (reqOverrides[r.utr].rejection_reason) r.rejection_reason = reqOverrides[r.utr].rejection_reason;
-      }
-    });
-
-    try {
-      const sanitized = mergedList.filter(r => r && r.id);
-      if (sanitized.length > 0) {
-        localStorage.setItem("all_recharge_requests", JSON.stringify(sanitized));
-      }
-    } catch(err) {}
-
-    return mergedList.sort((a, b) => new Date(b.submitted_at || b.created_at || 0) - new Date(a.submitted_at || a.created_at || 0));
-  } catch(err) {
-    return (typeof DEFAULT_RECHARGE_REQUESTS !== "undefined" && Array.isArray(DEFAULT_RECHARGE_REQUESTS) ? DEFAULT_RECHARGE_REQUESTS : []);
-  }
-}async function j1(e, optListingId, optFeatured){
+  return finalReqs;
+}
+async function j1(e, optListingId, optFeatured){
   let reqObj = null;
   try {
     const list = await Jp();
@@ -2222,7 +1788,7 @@ async function Jp(){
   const isUUID = str => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   const durationDays = reqObj?.plan?.duration_days || (Number(reqObj?.amount) >= 300 ? 365 : Number(reqObj?.amount) >= 180 ? 180 : Number(reqObj?.amount) >= 115 ? 90 : 30);
   const expDate = new Date(Date.now() + durationDays * 86400000).toISOString();
-  
+
   try {
     if (isUUID(e)) {
       await L.from("recharge_requests").update({
@@ -2233,44 +1799,96 @@ async function Jp(){
     }
   } catch(err) {}
 
+  const uId = reqObj?.user_id;
+  const uEmail = reqObj?.user_email;
+  const proProfileUpdate = {
+    is_pro: true,
+    pro_status: "active",
+    pro_expires_at: expDate,
+    pro_expiry_at: expDate,
+    approved_expiry_date: expDate,
+    account_status: "active",
+    status: "active"
+  };
   try {
-    let tUser = null;
-    try { const { data: t } = await L.auth.getUser(); if (t && t.user) tUser = t.user; } catch(err) {}
-    const adminUid = (tUser?.id && isUUID(tUser.id)) ? tUser.id : (reqObj?.user_id && isUUID(reqObj.user_id) ? reqObj.user_id : "54d69b2e-76f7-410d-84fc-af00f7101786");
-    const statusPayload = {
-      req_id: e,
-      utr: reqObj?.utr || "",
-      status: "approved",
+    if (uId && isUUID(uId)) {
+      await L.from("profiles").update(proProfileUpdate).eq("id", uId);
+    }
+  } catch(err) {}
+  try {
+    if (uEmail) {
+      await L.from("profiles").update(proProfileUpdate).eq("email", uEmail);
+    }
+  } catch(err) {}
+
+  const targetListingId = optListingId || reqObj?.listing_id;
+  if (targetListingId) {
+    try { await xd(targetListingId, "active", true); } catch(err) {}
+  }
+
+  await saveCloudSyncRecord("[SYS_RECHARGE_STATUS]", {
+    req_id: e,
+    utr: reqObj?.utr || "",
+    status: "approved",
+    approved_expiry_date: expDate,
+    user_id: uId || "",
+    user_email: uEmail || "",
+    is_top_pro: Boolean(reqObj?.is_top_pro || optFeatured),
+    listing_id: targetListingId || "",
+    reviewed_at: new Date().toISOString()
+  });
+
+  if (uId || uEmail) {
+    await saveCloudSyncRecord("[SYS_USER_STATUS]", {
+      user_id: uId || "",
+      user_email: uEmail || "",
+      is_pro: true,
+      pro_status: "active",
+      pro_expires_at: expDate,
       approved_expiry_date: expDate,
-      user_id: reqObj?.user_id || "",
-      user_email: reqObj?.user_email || "",
-      is_top_pro: Boolean(reqObj?.is_top_pro),
-      listing_id: reqObj?.listing_id || optListingId || "",
-      reviewed_at: new Date().toISOString()
-    };
-    await L.from("listings").insert({
-      user_id: adminUid,
-      title: "[SYS_RECHARGE_STATUS]",
-      category_id: "3ed03846-ea53-4f52-9db5-17550b75f3f2",
-      location_id: "02ef9e15-c49f-459e-916c-2432e90dd230",
-      price: 0,
-      condition: "new",
-      description: JSON.stringify(statusPayload),
-      phone: "9876543210",
-      whatsapp: "9876543210",
-      images: [],
+      account_status: "active",
       status: "active",
-      is_featured: false
+      updated_at: new Date().toISOString()
     });
-  } catch(err) {
-    console.warn("Cloud status insert error:", err);
   }
 
   try {
     const overrides = JSON.parse(localStorage.getItem("recharge_status_overrides") || "{}");
-    overrides[e] = { status: "approved" };
-    if (reqObj && reqObj.utr) overrides[reqObj.utr] = { status: "approved" };
+    overrides[e] = { status: "approved", approved_expiry_date: expDate };
+    if (reqObj && reqObj.utr) overrides[reqObj.utr] = { status: "approved", approved_expiry_date: expDate };
     localStorage.setItem("recharge_status_overrides", JSON.stringify(overrides));
+  } catch(err) {}
+
+  try {
+    const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");
+    const pData = { is_pro: true, pro_status: "active", pro_expires_at: expDate, approved_expiry_date: expDate };
+    if (uId) proOverrides[uId] = pData;
+    if (uEmail) {
+      proOverrides[uEmail] = pData;
+      proOverrides[uEmail.toLowerCase().trim()] = pData;
+    }
+    localStorage.setItem("admin_pro_overrides", JSON.stringify(proOverrides));
+    localStorage.setItem("pro_status_overrides", JSON.stringify(proOverrides));
+  } catch(err) {}
+
+  try {
+    const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
+    if (Array.isArray(users)) {
+      users.forEach(u => {
+        const matchId = uId && (u.id === uId || u.user_id === uId);
+        const cleanU = (u.email || "").toLowerCase().trim();
+        const matchEmail = uEmail && cleanU === uEmail.toLowerCase().trim();
+        if (matchId || matchEmail) {
+          u.is_pro = true;
+          u.pro_status = "active";
+          u.pro_expires_at = expDate;
+          u.approved_expiry_date = expDate;
+          u.account_status = "active";
+          u.status = "active";
+        }
+      });
+      localStorage.setItem("admin_users", JSON.stringify(users));
+    }
   } catch(err) {}
 
   try {
@@ -2279,162 +1897,142 @@ async function Jp(){
       if (r && (r.id === e || (reqObj && reqObj.utr && r.utr === reqObj.utr))) {
         r.status = "approved";
         r.approved_expiry_date = expDate;
-        if (!reqObj) reqObj = r;
       }
     });
     localStorage.setItem("all_recharge_requests", JSON.stringify(local));
   } catch(err) {}
 
-  try {
-    const customLocal = JSON.parse(localStorage.getItem("custom_recharge_requests") || "[]");
-    customLocal.forEach(r => {
-      if (r && (r.id === e || (reqObj && reqObj.utr && r.utr === reqObj.utr))) {
-        r.status = "approved";
-        r.approved_expiry_date = expDate;
-        if (!reqObj) reqObj = r;
-      }
-    });
-    localStorage.setItem("custom_recharge_requests", JSON.stringify(customLocal));
-  } catch(err) {}
-
-  try {
-    const targetListingId = optListingId || reqObj?.listing_id;
-    if (targetListingId) {
-      await xd(targetListingId, "active", !0);
-    } else if (reqObj?.listing_title) {
-      try {
-        const { data: matched } = await L.from("listings").select("id").ilike("title", reqObj.listing_title);
-        if (matched && matched.length > 0) {
-          for (const ml of matched) {
-            await xd(ml.id, "active", !0);
-          }
-        }
-      } catch(err2) {}
-    }
-  } catch(err) {}
-
-  try {
-    const uId = reqObj?.user_id;
-    const uEmail = reqObj?.user_email || reqObj?.user?.email;
-    if (uId && isUUID(uId)) {
-      await L.from("profiles").update({
-        is_pro: true,
-        pro_status: "active",
-        pro_expires_at: expDate,
-        approved_expiry_date: expDate
-      }).eq("id", uId);
-    }
-    if (uEmail) {
-      await L.from("profiles").update({
-        is_pro: true,
-        pro_status: "active",
-        pro_expires_at: expDate,
-        approved_expiry_date: expDate
-      }).eq("email", uEmail);
-    }
-  } catch(err) {}
-
-  try {
-    const isTopPro = reqObj?.is_top_pro || reqObj?.plan_id === "plan_single_top_pro" || Number(reqObj?.amount) === 30 || Number(reqObj?.amount) === 10 || Number(reqObj?.amount) === 20 || Boolean(reqObj?.listing_title || reqObj?.listing_id);
-    const txItem = {
-      id: "tx_" + (reqObj?.id || Date.now()),
-      user_id: reqObj?.user_id || "user",
-      user_name: reqObj?.user_name || reqObj?.user?.name || (reqObj?.user_email ? reqObj.user_email.split("@")[0] : "User"),
-      user_email: reqObj?.user_email || reqObj?.user?.email || "",
-      amount: reqObj?.amount || (isTopPro ? 30 : 112.5),
-      type: isTopPro ? "top_pro_boost" : "pro_membership",
-      description: isTopPro ? ("⭐ Top PRO Boost: " + (reqObj?.listing_title || "Ad Post") + " (UTR: " + (reqObj?.utr || "Verified") + ")") : ("👑 Monthly PRO Plan (UTR: " + (reqObj?.utr || "Verified") + ")"),
-      status: "completed",
-      created_at: reqObj?.submitted_at || new Date().toISOString()
-    };
-    const txList = JSON.parse(localStorage.getItem("user_transactions") || "[]");
-    txList.unshift(txItem);
-    localStorage.setItem("user_transactions", JSON.stringify(txList));
-
-    if (reqObj?.user_id) {
-      sendNotification(reqObj.user_id, isTopPro ? "⭐ Top PRO Boost Approved!" : "👑 Monthly PRO Plan Activated!", isTopPro ? "Aapka listing  + (reqObj.listing_title || Ad) +  Top PRO me feature ho gaya hai!" : "Aapka Monthly PRO plan approve ho gaya hai aur badge active hai.", isTopPro ? "boost_approved" : "recharge_approved");
-    }
-  } catch(err) {}
-
-  try {
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("recharge_status_updated", { detail: { id: e, status: "approved" } }));
-      window.dispatchEvent(new Event("storage"));
-    }
-  } catch(err) {}
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("recharge_status_updated", { detail: { id: e, status: "approved" } }));
+    window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: uId, email: uEmail, is_pro: true } }));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
 
-async function _1(e,t){
+async function _1(e, t){
   let reqObj = null;
   try {
     const list = await Jp();
     reqObj = list.find(r => r && (r.id === e || r.utr === e));
   } catch(err) {}
   const isUUID = str => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  try{ await L.rpc("reject_recharge", { p_request_id: e, p_reason: t }); } catch(err) {}
+  try{ if(isUUID(e)) await L.from("recharge_requests").update({ status: "rejected", rejection_reason: t }).eq("id", e); } catch(err) {}
 
-  try{await L.rpc("reject_recharge",{p_request_id:e,p_reason:t});}catch(err){}
-  try{if(isUUID(e)) await L.from("recharge_requests").update({status:"rejected",rejection_reason:t}).eq("id",e);}catch(err){}
+  await saveCloudSyncRecord("[SYS_RECHARGE_STATUS]", {
+    req_id: e,
+    utr: reqObj?.utr || "",
+    status: "rejected",
+    rejection_reason: t,
+    user_id: reqObj?.user_id || "",
+    reviewed_at: new Date().toISOString()
+  });
 
   try {
-    let tUser = null;
-    try { const { data: usr } = await L.auth.getUser(); if (usr && usr.user) tUser = usr.user; } catch(err) {}
-    const adminUid = (tUser?.id && isUUID(tUser.id)) ? tUser.id : (reqObj?.user_id && isUUID(reqObj.user_id) ? reqObj.user_id : "54d69b2e-76f7-410d-84fc-af00f7101786");
-    const statusPayload = {
-      req_id: e,
-      utr: reqObj?.utr || "",
-      status: "rejected",
-      rejection_reason: t,
-      user_id: reqObj?.user_id || "",
-      reviewed_at: new Date().toISOString()
-    };
-    await L.from("listings").insert({
-      user_id: adminUid,
-      title: "[SYS_RECHARGE_STATUS]",
-      category_id: "3ed03846-ea53-4f52-9db5-17550b75f3f2",
-      location_id: "02ef9e15-c49f-459e-916c-2432e90dd230",
-      price: 0,
-      condition: "new",
-      description: JSON.stringify(statusPayload),
-      phone: "9876543210",
-      whatsapp: "9876543210",
-      images: [],
-      status: "active",
-      is_featured: false
+    const overrides = JSON.parse(localStorage.getItem("recharge_status_overrides") || "{}");
+    overrides[e] = { status: "rejected", rejection_reason: t };
+    if (reqObj && reqObj.utr) overrides[reqObj.utr] = { status: "rejected", rejection_reason: t };
+    localStorage.setItem("recharge_status_overrides", JSON.stringify(overrides));
+  } catch(err) {}
+
+  try {
+    const local = JSON.parse(localStorage.getItem("all_recharge_requests") || "[]");
+    local.forEach(r => {
+      if (r && (r.id === e || (reqObj && reqObj.utr && r.utr === reqObj.utr))) {
+        r.status = "rejected";
+        r.rejection_reason = t;
+      }
     });
-  } catch(err) {
-    console.warn("Cloud status reject insert error:", err);
+    localStorage.setItem("all_recharge_requests", JSON.stringify(local));
+  } catch(err) {}
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("recharge_status_updated", { detail: { id: e, status: "rejected" } }));
+    window.dispatchEvent(new Event("storage"));
   }
+}
 
-  try{
-    const overrides=JSON.parse(localStorage.getItem("recharge_status_overrides")||"{}");
-    overrides[e]={status:"rejected",rejection_reason:t};
-    if(reqObj&&reqObj.utr) overrides[reqObj.utr]={status:"rejected",rejection_reason:t};
-    localStorage.setItem("recharge_status_overrides",JSON.stringify(overrides));
-  }catch(err){}
-  try{
-    const local=JSON.parse(localStorage.getItem("all_recharge_requests")||"[]");
-    local.forEach(r=>{if(r&&(r.id===e||(reqObj&&reqObj.utr&&r.utr===reqObj.utr))){r.status="rejected";r.rejection_reason=t;}});
-    localStorage.setItem("all_recharge_requests",JSON.stringify(local));
-  }catch(err){}
-  try{
-    const customLocal=JSON.parse(localStorage.getItem("custom_recharge_requests")||"[]");
-    customLocal.forEach(r=>{if(r&&(r.id===e||(reqObj&&reqObj.utr&&r.utr===reqObj.utr))){r.status="rejected";r.rejection_reason=t;}});
-    localStorage.setItem("custom_recharge_requests",JSON.stringify(customLocal));
-  }catch(err){}
-
-  try {
-    if (reqObj?.user_id) {
-      sendNotification(reqObj.user_id, "❌ PRO Request Rejected", "Aapka recharge request reject ho gaya hai: " + t, "recharge_rejected");
-    }
+async function xd(e,t,n){
+  if (t === "deleted") {
+    try {
+      const delList = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]");
+      if (!delList.includes(e)) {
+        delList.push(e);
+        localStorage.setItem("deleted_listing_ids", JSON.stringify(delList));
+      }
+    } catch(err) {}
+    try {
+      const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+      const filtered = saved.filter(l => l && l.id !== e);
+      localStorage.setItem("user_custom_listings", JSON.stringify(filtered));
+    } catch(err) {}
+    try { await L.from("listings").delete().eq("id", e); } catch(err) {}
+    try { await L.from("listings").update({status: "deleted"}).eq("id", e); } catch(err) {}
+    try { await L.rpc("admin_set_listing_status", {p_listing_id: e, p_status: "deleted", p_featured: null}); } catch(err) {}
+    
+    await saveCloudSyncRecord("[SYS_DELETED_LISTING]", { deleted_id: e, deleted_at: new Date().toISOString() });
+    
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("recharge_status_updated", { detail: { id: e, status: "rejected", reason: t } }));
+      window.dispatchEvent(new CustomEvent("listing_deleted", { detail: { id: e } }));
       window.dispatchEvent(new Event("storage"));
     }
+    return;
+  }
+
+  try {
+    const overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}");
+    overrides[e] = { ...(overrides[e] || {}), status: t };
+    if (n !== void 0 && n !== null) overrides[e].is_featured = n;
+    localStorage.setItem("listing_status_overrides", JSON.stringify(overrides));
   } catch(err) {}
-}async function xd(e,t,n){  if (t === "deleted") {    try {      const delList = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]");      if (!delList.includes(e)) {        delList.push(e);        localStorage.setItem("deleted_listing_ids", JSON.stringify(delList));      }    } catch(err) {}    try {      const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");      const filtered = saved.filter(l => l && l.id !== e);      localStorage.setItem("user_custom_listings", JSON.stringify(filtered));    } catch(err) {}    try { await L.from("listings").delete().eq("id", e); } catch(err) {}    try { await L.from("listings").update({status: "deleted"}).eq("id", e); } catch(err) {}    try { await L.rpc("admin_set_listing_status", {p_listing_id: e, p_status: "deleted", p_featured: null}); } catch(err) {}    try {      let tUser = null;      try { const { data: usr } = await L.auth.getUser(); if (usr && usr.user) tUser = usr.user; } catch(err) {}      const isUUID = str => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);      const syncUid = (tUser?.id && isUUID(tUser.id)) ? tUser.id : "54d69b2e-76f7-410d-84fc-af00f7101786";      await L.from("listings").insert({        user_id: syncUid,        title: "[SYS_DELETED_LISTING]",        category_id: "3ed03846-ea53-4f52-9db5-17550b75f3f2",        location_id: "02ef9e15-c49f-459e-916c-2432e90dd230",        price: 0,        condition: "new",        description: JSON.stringify({ deleted_id: e, deleted_at: new Date().toISOString() }),        phone: "9876543210",        whatsapp: "9876543210",        images: [],        status: "active",        is_featured: false      });    } catch(err) {}    if (typeof window !== "undefined") {      window.dispatchEvent(new CustomEvent("listing_deleted", { detail: { id: e } }));      window.dispatchEvent(new Event("storage"));    }    return;  }  try {    const overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}");    overrides[e] = { ...(overrides[e] || {}), status: t };    if (n !== void 0 && n !== null) overrides[e].is_featured = n;    localStorage.setItem("listing_status_overrides", JSON.stringify(overrides));  } catch(err) {}  try {    const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");    saved.forEach(l => {      if (l && l.id === e) {        l.status = t;        if (n !== void 0 && n !== null) l.is_featured = n;      }    });    localStorage.setItem("user_custom_listings", JSON.stringify(saved));  } catch(err) {}  try {    if (n !== void 0 && n !== null) {      await L.from("listings").update({status: t, is_featured: n}).eq("id", e);    } else {      await L.from("listings").update({status: t}).eq("id", e);    }  } catch(err) {}  try {    await L.rpc("admin_set_listing_status", {p_listing_id: e, p_status: t, p_featured: n ?? null});  } catch(err) {}}async function b1(e, t, uEmail) {
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+    saved.forEach(l => {
+      if (l && l.id === e) {
+        l.status = t;
+        if (n !== void 0 && n !== null) l.is_featured = n;
+      }
+    });
+    localStorage.setItem("user_custom_listings", JSON.stringify(saved));
+  } catch(err) {}
+
+  try {
+    if (n !== void 0 && n !== null) {
+      await L.from("listings").update({status: t, is_featured: n}).eq("id", e);
+    } else {
+      await L.from("listings").update({status: t}).eq("id", e);
+    }
+  } catch(err) {}
+  try {
+    await L.rpc("admin_set_listing_status", {p_listing_id: e, p_status: t, p_featured: n ?? null});
+  } catch(err) {}
+
+  await saveCloudSyncRecord("[SYS_LISTING_STATUS]", {
+    listing_id: e,
+    status: t,
+    is_featured: n,
+    updated_at: new Date().toISOString()
+  });
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("listing_status_updated", { detail: { id: e, status: t, is_featured: n } }));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+async function b1(e, t, uEmail) {
   try { await L.rpc("admin_set_user_role", { p_user_id: e, p_role: t }); } catch(err) {}
   try { await L.from("profiles").update({ role: t }).eq("id", e); } catch(err) {}
   try { if (uEmail) await L.from("profiles").update({ role: t }).eq("email", uEmail); } catch(err) {}
+  
+  await saveCloudSyncRecord("[SYS_USER_STATUS]", {
+    user_id: e || "",
+    user_email: uEmail || "",
+    role: t,
+    updated_at: new Date().toISOString()
+  });
+
   try {
     const roles = JSON.parse(localStorage.getItem("admin_role_overrides") || "{}");
     if (e) roles[e] = t;
@@ -2444,6 +2042,7 @@ async function _1(e,t){
     }
     localStorage.setItem("admin_role_overrides", JSON.stringify(roles));
   } catch(err) {}
+
   try {
     const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
     if (Array.isArray(users)) {
@@ -2458,20 +2057,36 @@ async function _1(e,t){
       localStorage.setItem("admin_users", JSON.stringify(users));
     }
   } catch(err) {}
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, role: t } }));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
+
 async function wd(e, t, uEmail) {
   try { await L.rpc("admin_set_account_status", { p_user_id: e, p_status: t }); } catch(err) {}
   try { await L.from("profiles").update({ account_status: t, status: t }).eq("id", e); } catch(err) {}
   try { if (uEmail) await L.from("profiles").update({ account_status: t, status: t }).eq("email", uEmail); } catch(err) {}
+
+  await saveCloudSyncRecord("[SYS_USER_STATUS]", {
+    user_id: e || "",
+    user_email: uEmail || "",
+    account_status: t,
+    status: t,
+    updated_at: new Date().toISOString()
+  });
+
   try {
     const stats = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");
-    if (e) stats[e] = t;
+    if (e) stats[e] = { account_status: t, status: t };
     if (uEmail) {
-      stats[uEmail] = t;
-      stats[uEmail.toLowerCase().trim()] = t;
+      stats[uEmail] = { account_status: t, status: t };
+      stats[uEmail.toLowerCase().trim()] = { account_status: t, status: t };
     }
     localStorage.setItem("admin_status_overrides", JSON.stringify(stats));
   } catch(err) {}
+
   try {
     if (e) {
       const cachedStr = localStorage.getItem("mlb_saved_profile_" + e);
@@ -2483,6 +2098,7 @@ async function wd(e, t, uEmail) {
       }
     }
   } catch(err) {}
+
   try {
     const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
     if (Array.isArray(users)) {
@@ -2498,20 +2114,33 @@ async function wd(e, t, uEmail) {
       localStorage.setItem("admin_users", JSON.stringify(users));
     }
   } catch(err) {}
-  try {
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, account_status: t, status: t } }));
-      window.dispatchEvent(new CustomEvent("user_status_changed", { detail: { id: e, email: uEmail, account_status: t } }));
-      window.dispatchEvent(new Event("storage"));
-    }
-  } catch(err) {}
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, account_status: t, status: t } }));
+    window.dispatchEvent(new CustomEvent("user_status_changed", { detail: { id: e, email: uEmail, account_status: t } }));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
+
 async function k1(e, t, n, uEmail) {
   const days = Number(t) || 30;
   const expiry = new Date(Date.now() + days * 86400000).toISOString();
   try { await L.rpc("admin_activate_pro", { p_user_id: e, p_duration_days: days, p_reason: n || ("Admin activated PRO: " + days + " days") }); } catch(err) {}
-  try { await L.from("profiles").update({ is_pro: !0, pro_status: "active", pro_expires_at: expiry, pro_expiry_at: expiry, approved_expiry_date: expiry }).eq("id", e); } catch(err) {}
-  try { if (uEmail) await L.from("profiles").update({ is_pro: !0, pro_status: "active", pro_expires_at: expiry, pro_expiry_at: expiry, approved_expiry_date: expiry }).eq("email", uEmail); } catch(err) {}
+  try { await L.from("profiles").update({ is_pro: !0, pro_status: "active", pro_expires_at: expiry, pro_expiry_at: expiry, approved_expiry_date: expiry, account_status: "active", status: "active" }).eq("id", e); } catch(err) {}
+  try { if (uEmail) await L.from("profiles").update({ is_pro: !0, pro_status: "active", pro_expires_at: expiry, pro_expiry_at: expiry, approved_expiry_date: expiry, account_status: "active", status: "active" }).eq("email", uEmail); } catch(err) {}
+
+  await saveCloudSyncRecord("[SYS_USER_STATUS]", {
+    user_id: e || "",
+    user_email: uEmail || "",
+    is_pro: true,
+    pro_status: "active",
+    pro_expires_at: expiry,
+    approved_expiry_date: expiry,
+    account_status: "active",
+    status: "active",
+    updated_at: new Date().toISOString()
+  });
+
   const pData = { is_pro: !0, pro_status: "active", pro_expires_at: expiry, pro_expiry_at: expiry, approved_expiry_date: expiry };
   try {
     const localProList = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");
@@ -2523,6 +2152,7 @@ async function k1(e, t, n, uEmail) {
     localStorage.setItem("admin_pro_overrides", JSON.stringify(localProList));
     localStorage.setItem("pro_status_overrides", JSON.stringify(localProList));
   } catch(err) {}
+
   try {
     const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
     if (Array.isArray(users)) {
@@ -2536,16 +2166,35 @@ async function k1(e, t, n, uEmail) {
           u.pro_expires_at = expiry;
           u.pro_expiry_at = expiry;
           u.approved_expiry_date = expiry;
+          u.account_status = "active";
+          u.status = "active";
         }
       });
       localStorage.setItem("admin_users", JSON.stringify(users));
     }
   } catch(err) {}
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, is_pro: true, pro_status: "active" } }));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
+
 async function S1(e, uEmail) {
   try { await L.rpc("admin_remove_pro", { p_user_id: e }); } catch(err) {}
   try { await L.from("profiles").update({ is_pro: !1, pro_status: "inactive", pro_expires_at: null, pro_expiry_at: null, approved_expiry_date: null }).eq("id", e); } catch(err) {}
   try { if (uEmail) await L.from("profiles").update({ is_pro: !1, pro_status: "inactive", pro_expires_at: null, pro_expiry_at: null, approved_expiry_date: null }).eq("email", uEmail); } catch(err) {}
+
+  await saveCloudSyncRecord("[SYS_USER_STATUS]", {
+    user_id: e || "",
+    user_email: uEmail || "",
+    is_pro: false,
+    pro_status: "inactive",
+    pro_expires_at: null,
+    approved_expiry_date: null,
+    updated_at: new Date().toISOString()
+  });
+
   const pData = { is_pro: !1, pro_status: "inactive", pro_expires_at: null, pro_expiry_at: null, approved_expiry_date: null };
   try {
     const localProList = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");
@@ -2557,6 +2206,7 @@ async function S1(e, uEmail) {
     localStorage.setItem("admin_pro_overrides", JSON.stringify(localProList));
     localStorage.setItem("pro_status_overrides", JSON.stringify(localProList));
   } catch(err) {}
+
   try {
     const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
     if (Array.isArray(users)) {
@@ -2575,20 +2225,11 @@ async function S1(e, uEmail) {
       localStorage.setItem("admin_users", JSON.stringify(users));
     }
   } catch(err) {}
-  try {
-    const list = JSON.parse(localStorage.getItem("all_recharge_requests") || "[]");
-    let changed = !1;
-    list.forEach(r => {
-      if ((e && r.user_id === e) || (uEmail && (r.email === uEmail || r.user_email === uEmail))) {
-        r.status = "rejected";
-        r.approved_expiry_date = null;
-        changed = !0;
-      }
-    });
-    if (changed) {
-      localStorage.setItem("all_recharge_requests", JSON.stringify(list));
-    }
-  } catch(err) {}
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, is_pro: false, pro_status: "inactive" } }));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
 async function N1(e){let item={...e};if(!item.id)item.id="cat_"+Date.now();try{if(e.id){await L.from("categories").update(item).eq("id",e.id)}else{await L.from("categories").insert(item)}}catch(err){}try{const saved=JSON.parse(localStorage.getItem("admin_categories")||"[]");const idx=saved.findIndex(c=>c.id===item.id);if(idx>=0)saved[idx]=item;else saved.push(item);localStorage.setItem("admin_categories",JSON.stringify(saved))}catch(err){}return item}async function C1(e){try{await L.from("categories").delete().eq("id",e)}catch(err){}try{const saved=JSON.parse(localStorage.getItem("admin_categories")||"[]");const filtered=saved.filter(c=>c.id!==e);localStorage.setItem("admin_categories",JSON.stringify(filtered))}catch(err){}}async function E1(e){let item={...e};if(!item.id)item.id="loc_"+Date.now();try{if(e.id){await L.from("locations").update(item).eq("id",e.id)}else{await L.from("locations").insert(item)}}catch(err){}try{const saved=JSON.parse(localStorage.getItem("admin_locations")||"[]");const idx=saved.findIndex(l=>l.id===item.id);if(idx>=0)saved[idx]=item;else saved.push(item);localStorage.setItem("admin_locations",JSON.stringify(saved))}catch(err){}return item}async function P1(e){try{await L.from("locations").delete().eq("id",e)}catch(err){}try{const saved=JSON.parse(localStorage.getItem("admin_locations")||"[]");const filtered=saved.filter(l=>l.id!==e);localStorage.setItem("admin_locations",JSON.stringify(filtered))}catch(err){}}async function R1(e){let item={...e};if(!item.id)item.id="banner_"+Date.now()+"_"+Math.random().toString(36).slice(2);try{if(e.id){const{error:t}=await L.from("banners").update(item).eq("id",e.id);if(t)console.warn("Supabase banner update error:",t)}else{const{error:t}=await L.from("banners").insert(item);if(t)console.warn("Supabase banner insert error:",t)}}catch(err){console.warn("Banner save fallback to local:",err)}try{const saved=JSON.parse(localStorage.getItem("admin_banners")||"[]");const idx=saved.findIndex(b=>b.id===item.id);if(idx>=0)saved[idx]=item;else saved.push(item);localStorage.setItem("admin_banners",JSON.stringify(saved))}catch(err){}return item}async function T1(e){try{await L.from("banners").delete().eq("id",e)}catch(err){}try{const saved=JSON.parse(localStorage.getItem("admin_banners")||"[]");const filtered=saved.filter(b=>b.id!==e);localStorage.setItem("admin_banners",JSON.stringify(filtered))}catch(err){}}async function L1(e){  let item = Object.assign({}, e);  if (!item.id) item.id = "plan_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);  try {    const { data: existing } = await L.from("pro_plans").select("id").eq("id", item.id).maybeSingle();    if (existing) {      await L.from("pro_plans").update(item).eq("id", item.id);    } else {      await L.from("pro_plans").insert(item);    }  } catch(err) {}  let saved = [];  try {    saved = JSON.parse(localStorage.getItem("admin_plans") || "[]");  } catch(err) {}  if (!Array.isArray(saved) || saved.length === 0) {    saved = [      { id: "plan_1m", name: "1 Month PRO", duration_days: 30, price: 112.5, description: "30 days priority listings & PRO badge", is_active: true, sort_order: 1 },      { id: "plan_3m", name: "3 Months PRO", duration_days: 90, price: 120, description: "90 days priority listings & PRO badge", is_active: true, sort_order: 2 },      { id: "plan_6m", name: "6 Months PRO", duration_days: 180, price: 200, description: "180 days priority listings & PRO badge", is_active: true, sort_order: 3 },      { id: "plan_1y", name: "1 Year PRO", duration_days: 365, price: 350, description: "365 days priority listings & PRO badge", is_active: true, sort_order: 4 }    ];  }  const idx = saved.findIndex(function(p) { return p && (p.id === item.id || (p.name && item.name && p.name.toLowerCase().trim() === item.name.toLowerCase().trim())); });  if (idx >= 0) {    saved[idx] = Object.assign({}, saved[idx], item);    item.id = saved[idx].id;  } else {    saved.push(item);  }  try {    localStorage.setItem("admin_plans", JSON.stringify(saved));  } catch(err) {}  const activePlans = saved.filter(function(p) { return !p.is_deleted; });  try {    await syncCloudConfig({ plans: activePlans });  } catch(err) {}  if (typeof window !== "undefined") {    window.dispatchEvent(new CustomEvent("pro_plans_updated", { detail: activePlans }));    window.dispatchEvent(new Event("storage"));  }  return item;}
 
