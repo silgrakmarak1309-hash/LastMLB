@@ -1141,6 +1141,140 @@ async function Vp(e={}){
     return item;
   });
 }
+
+async function qp(userId) {
+  if (!userId) return [];
+  let list = [];
+  let syncState = { deletedListingIds: [], listingStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const deletedIds = syncState.deletedListingIds || [];
+  const overrides = syncState.listingStatusOverrides || {};
+
+  try {
+    const { data: n, error: r } = await L.from("listings")
+      .select(`*, category:categories(*), location:locations(*)`)
+      .eq("user_id", userId)
+      .not("title", "like", "[SYS_%")
+      .not("title", "like", "SYS_%")
+      .order("created_at", { ascending: false });
+    if (!r && n && n.length > 0) {
+      list = n;
+    } else {
+      const { data: nSimple } = await L.from("listings")
+        .select("*")
+        .eq("user_id", userId)
+        .not("title", "like", "[SYS_%")
+        .not("title", "like", "SYS_%")
+        .order("created_at", { ascending: false });
+      if (nSimple && nSimple.length > 0) list = nSimple;
+    }
+  } catch(err) {
+    try {
+      const { data: nSimple } = await L.from("listings")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (nSimple && nSimple.length > 0) list = nSimple;
+    } catch(err2) {}
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+    if (saved && saved.length > 0) {
+      saved.forEach(function(sItem) {
+        if (sItem && (sItem.user_id === userId || !sItem.user_id)) {
+          if (!list.some(function(item) { return item.id === sItem.id; })) {
+            list.unshift(sItem);
+          }
+        }
+      });
+    }
+  } catch(e) {}
+
+  const filtered = list.filter(function(item) {
+    if (!item || !item.id) return false;
+    const titleStr = String(item.title || "");
+    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_")) return false;
+    if (deletedIds.includes(item.id)) return false;
+    const override = overrides[item.id];
+    const curStatus = (override && override.status) ? override.status : item.status;
+    if (curStatus === "deleted") return false;
+    return true;
+  });
+
+  return filtered.map(function(item) {
+    const override = overrides[item.id];
+    if (override) {
+      return {
+        ...item,
+        status: override.status || item.status,
+        is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
+      };
+    }
+    return item;
+  });
+}
+
+async function o1(id) {
+  if (!id) return null;
+  let syncState = { deletedListingIds: [], listingStatusOverrides: {} };
+  try { syncState = await getCloudSyncState(); } catch(err) {}
+  const deletedIds = syncState.deletedListingIds || [];
+  const overrides = syncState.listingStatusOverrides || {};
+  if (deletedIds.includes(id)) return null;
+
+  let item = null;
+  try {
+    const { data, error } = await L.from("listings")
+      .select(`*, category:categories(*), location:locations(*), seller:profiles(*)`)
+      .eq("id", id)
+      .maybeSingle();
+    if (!error && data) {
+      item = data;
+    } else {
+      const { data: data2 } = await L.from("listings")
+        .select(`*, category:categories(*), location:locations(*)`)
+        .eq("id", id)
+        .maybeSingle();
+      if (data2) item = data2;
+    }
+  } catch(err) {
+    try {
+      const { data: simpleData } = await L.from("listings")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (simpleData) item = simpleData;
+    } catch(err2) {}
+  }
+
+  if (!item) {
+    try {
+      const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
+      item = saved.find(function(l) { return l && l.id === id; }) || null;
+    } catch(e) {}
+  }
+
+  if (!item) return null;
+  if (!item.seller && item.user_id) {
+    try {
+      const { data: prof } = await L.from("profiles").select("*").eq("id", item.user_id).maybeSingle();
+      if (prof) item.seller = prof;
+    } catch(err) {}
+  }
+
+  const override = overrides[id];
+  if (override) {
+    if (override.status === "deleted") return null;
+    return {
+      ...item,
+      status: override.status || item.status,
+      is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
+    };
+  }
+  return item;
+}
+
 async function syncCloudConfig(updates) {
   try {
     let tUser = null;
