@@ -272,21 +272,37 @@ function bw({children:e}){
         const{data:u_auth}=await L.auth.getUser();
         const u_email=u_auth?.user?.email;
         const u_name=u_auth?.user?.user_metadata?.name||u_email?.split('@')[0]||'User';
-        const defaultExpiry=new Date(Date.now()+30*86400000).toISOString();
+        const isAdminUser = isUserAdmin({email:u_email});
         if(!p_data){
-          p_data={id:w,email:u_email,name:u_name,role:(isUserAdmin({email:u_email}))?'super_admin':'user',is_pro:!0,pro_status:'active',pro_expires_at:defaultExpiry,created_at:new Date().toISOString()};
+          p_data={id:w,email:u_email,name:u_name,role:isAdminUser?'super_admin':'user',account_status:'active',status:'active',is_pro:isAdminUser,pro_status:isAdminUser?'active':'inactive',created_at:new Date().toISOString()};
           try{await L.from('profiles').upsert(p_data)}catch(err){}
         }else{
-          if(isUserAdmin({email:u_email})){
+          if(isAdminUser){
             p_data={...p_data,role:'super_admin',is_pro:!0,pro_status:'active'};
             try{await L.from('profiles').update({role:'super_admin',is_pro:!0,pro_status:'active'}).eq('id',w)}catch(err){}
-          }else if(!p_data.pro_expires_at&&p_data.is_pro===undefined){
-            p_data={...p_data,is_pro:!0,pro_status:'active',pro_expires_at:defaultExpiry};
-            try{await L.from('profiles').update({is_pro:!0,pro_status:'active',pro_expires_at:defaultExpiry}).eq('id',w)}catch(err){}
           }
         }
       }catch(e){}
-      if(p_data){try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}}l(p_data);
+      if(p_data){
+        try {
+          const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");
+          const sOverride = statusOverrides[p_data.id] || (p_data.email && (statusOverrides[p_data.email] || statusOverrides[p_data.email.toLowerCase().trim()]));
+          if (sOverride) {
+            p_data.account_status = sOverride;
+            p_data.status = sOverride;
+          }
+          const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");
+          const pOverride = proOverrides[p_data.id] || (p_data.email && (proOverrides[p_data.email] || proOverrides[p_data.email.toLowerCase().trim()]));
+          if (pOverride) {
+            if (pOverride.is_pro !== undefined) p_data.is_pro = pOverride.is_pro;
+            if (pOverride.pro_status !== undefined) p_data.pro_status = pOverride.pro_status;
+            if (pOverride.pro_expires_at) p_data.pro_expires_at = pOverride.pro_expires_at;
+            if (pOverride.approved_expiry_date) p_data.approved_expiry_date = pOverride.approved_expiry_date;
+          }
+        } catch(err) {}
+        try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}
+      }
+      l(p_data);
     } catch(err) {
       console.warn('Profile fetch failure:', err);
     }
@@ -333,12 +349,24 @@ function bw({children:e}){
       unsub = w?.subscription?.unsubscribe;
     } catch(err) {}
 
+    const handleProfileSync = () => {
+      if (t) u(t.id).catch(()=>{});
+    };
+    window.addEventListener("user_profile_updated", handleProfileSync);
+    window.addEventListener("user_status_changed", handleProfileSync);
+    window.addEventListener("recharge_status_updated", handleProfileSync);
+    window.addEventListener("storage", handleProfileSync);
+
     return () => {
       isMounted = false;
       clearTimeout(safetyTimer);
       if(unsub) unsub();
+      window.removeEventListener("user_profile_updated", handleProfileSync);
+      window.removeEventListener("user_status_changed", handleProfileSync);
+      window.removeEventListener("recharge_status_updated", handleProfileSync);
+      window.removeEventListener("storage", handleProfileSync);
     };
-  },[u]);
+  },[t,u]);
 
   const h=async(w,j,f)=>{try{const{error:g}=await L.auth.signUp({email:w,password:j,options:{data:{name:f}}});return{error:(g==null?void 0:g.message)??null}}catch(e){return{error:e.message||'Sign up failed'}}},
   p=async(w,j)=>{try{const{error:f}=await L.auth.signInWithPassword({email:w,password:j});return{error:(f==null?void 0:f.message)??null}}catch(e){return{error:e.message||'Sign in failed'}}},
@@ -1142,7 +1170,8 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
     if (!i || !i.id || !i.title) return true;
     const titleStr = String(i.title).trim();
     if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_") || titleStr.includes("[SYS_") || titleStr.includes("SYS_DELETED_LISTING") || titleStr.includes("SYS_RECHARGE") || titleStr.includes("SYS_APP_CONFIG") || titleStr.includes("SYS_TOP_PRO")) return true;
-    if (i.status === "deleted" || i.status === "rejected" || i.is_deleted === true) return true;
+    if (i.status !== "active") return true;
+    if (i.is_deleted === true) return true;
     if (deletedIds.includes(i.id)) return true;
     return false;
   };
@@ -1524,6 +1553,8 @@ async function checkProExpiryNotifications(user, profile) {
 async function c1(e){
   const { data: t } = await L.auth.getUser();
   if (!t || !t.user) throw new Error("You must be signed in to post an ad");
+  const uEmail = t.user.email || "";
+  const uName = t.user.user_metadata?.name || (uEmail ? uEmail.split("@")[0] : "User");
   const locStr = e.location_name || (typeof e.location === "object" ? e.location.name : e.location) || ([e.town || e.village, e.district, e.state].filter(Boolean).join(", ")) || "Tura, Meghalaya";
   const locObj = {
     id: e.location_id || ("loc_" + Date.now()),
@@ -1569,6 +1600,8 @@ async function c1(e){
   if (!validLocId) validLocId = "02ef9e15-c49f-459e-916c-2432e90dd230";
   const newListing = {
     user_id: t.user.id,
+    user_email: uEmail,
+    user_name: uName,
     title: e.title,
     category_id: validCatId,
     location_id: validLocId,
@@ -1578,13 +1611,13 @@ async function c1(e){
     phone: e.phone || "",
     whatsapp: e.whatsapp || "",
     images: e.images || [],
-    status: "active",
+    status: "pending",
     is_featured: !!e.is_featured
   };
   let created = null;
   try {
     const { data: n, error: r } = await L.from("listings").insert(newListing).select("*, category:categories(*), location:locations(*)").single();
-    if (!r && n) created = Object.assign({}, n, { location: locObj, location_name: locStr, _synced_to_supabase: true });
+    if (!r && n) created = Object.assign({}, n, { location: locObj, location_name: locStr, user_email: uEmail, user_name: uName, _synced_to_supabase: true });
   } catch(err) {
     console.warn("Listing insert error:", err);
   }
@@ -1598,12 +1631,38 @@ async function c1(e){
         return v.toString(16);
       });
     }
-    created = Object.assign({ id: getUuid() }, newListing, { location: locObj, location_name: locStr, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), views_count: 0 });
+    created = Object.assign({ id: getUuid() }, newListing, { location: locObj, location_name: locStr, user_email: uEmail, user_name: uName, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), views_count: 0 });
   }
   try {
     const saved = JSON.parse(localStorage.getItem("user_custom_listings") || "[]");
     saved.unshift(created);
     localStorage.setItem("user_custom_listings", JSON.stringify(saved));
+  } catch(err) {}
+  try {
+    const overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}");
+    overrides[created.id] = { status: "pending", is_featured: !!created.is_featured };
+    localStorage.setItem("listing_status_overrides", JSON.stringify(overrides));
+  } catch(err) {}
+  try {
+    const adminNotif = {
+      id: "notif_listing_" + (created.id || Date.now()),
+      user_id: "admin",
+      title: "📋 New Post Listing Request Submitted",
+      message: "User " + (uEmail || uName) + " has submitted a new ad: \"" + (e.title || "Untitled") + "\". Awaiting admin approval to publish.",
+      type: "post_request",
+      read: false,
+      created_at: new Date().toISOString()
+    };
+    const allNotifs = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
+    allNotifs.unshift(adminNotif);
+    localStorage.setItem("admin_notifications", JSON.stringify(allNotifs));
+  } catch(err) {}
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("listing_created", { detail: created }));
+      window.dispatchEvent(new CustomEvent("listing_status_updated", { detail: { id: created.id, status: "pending" } }));
+      window.dispatchEvent(new Event("storage"));
+    }
   } catch(err) {}
   return created;
 }
@@ -2414,6 +2473,17 @@ async function wd(e, t, uEmail) {
     localStorage.setItem("admin_status_overrides", JSON.stringify(stats));
   } catch(err) {}
   try {
+    if (e) {
+      const cachedStr = localStorage.getItem("mlb_saved_profile_" + e);
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr);
+        cached.account_status = t;
+        cached.status = t;
+        localStorage.setItem("mlb_saved_profile_" + e, JSON.stringify(cached));
+      }
+    }
+  } catch(err) {}
+  try {
     const users = JSON.parse(localStorage.getItem("admin_users") || "[]");
     if (Array.isArray(users)) {
       users.forEach(u => {
@@ -2426,6 +2496,13 @@ async function wd(e, t, uEmail) {
         }
       });
       localStorage.setItem("admin_users", JSON.stringify(users));
+    }
+  } catch(err) {}
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("user_profile_updated", { detail: { id: e, email: uEmail, account_status: t, status: t } }));
+      window.dispatchEvent(new CustomEvent("user_status_changed", { detail: { id: e, email: uEmail, account_status: t } }));
+      window.dispatchEvent(new Event("storage"));
     }
   } catch(err) {}
 }
@@ -4382,7 +4459,7 @@ function rj(){const{user:e}=Ae(),t=he(),n=ke(),[r,s]=m.useState([]),[i,l]=m.useS
     ]})
   ]})
 ]}),
-a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(qn,{icon:a.jsx($p,{className:"w-4 h-4"}),label:"Email",value:t.email}),a.jsx(qn,{icon:a.jsx(Dp,{className:"w-4 h-4"}),label:"Phone",value:t.phone||"Not set"}),a.jsx(qn,{icon:a.jsx(wo,{className:"w-4 h-4"}),label:"WhatsApp",value:t.whatsapp||"Not set"}),a.jsx(qn,{icon:a.jsx(yt,{className:"w-4 h-4"}),label:"City",value:t.city||"Not set"}),a.jsx(qn,{icon:a.jsx(jo,{className:"w-4 h-4"}),label:"Account Status",value:t.account_status==="active"?"Active":"Blocked"}),a.jsx(qn,{icon:a.jsx(kr,{className:"w-4 h-4"}),label:"Role",value:t.role})]}),a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(di,{icon:a.jsx(Re,{className:"w-4 h-4"}),label:"My Ads",sublabel:`${N} active`,onClick:()=>i("/my-ads")}),a.jsx(di,{icon:a.jsx(Ps,{className:"w-4 h-4"}),label:"Favorites",onClick:()=>i("/favorites")}),a.jsx(di,{icon:a.jsx(br,{className:"w-4 h-4"}),label:"Recharge / PRO",onClick:()=>i("/recharge")}),I&&a.jsx(di,{icon:a.jsx(jo,{className:"w-4 h-4 text-primary-500"}),label:"Admin Panel",onClick:()=>i("/admin"),highlight:!0})]}),a.jsxs("button",{onClick:()=>n().then(()=>i("/")),className:"btn-outline w-full text-error-600 border-error-200 hover:bg-error-50",children:[a.jsx(zw,{className:"w-4 h-4"})," Sign Out"]})]}),a.jsx(ze,{open:l,onClose:()=>o(!1),title:"Edit Profile",children:a.jsxs("div",{className:"p-5 space-y-4",children:[a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"Name"}),a.jsx("input",{type:"text",value:x,onChange:M=>w(M.target.value),className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"Phone"}),a.jsx("input",{type:"tel",value:j,onChange:M=>f(M.target.value),placeholder:"10-digit number",className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"WhatsApp Number"}),a.jsx("input",{type:"tel",value:g,onChange:M=>y(M.target.value),placeholder:"Same as phone if empty",className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"City / Location"}),a.jsx("input",{type:"text",value:_,onChange:M=>k(M.target.value),placeholder:"Your city",className:"input"})]}),a.jsxs("div",{className:"flex gap-3 pt-2",children:[a.jsx("button",{onClick:()=>o(!1),className:"btn-outline flex-1",children:"Cancel"}),a.jsx("button",{onClick:P,disabled:c,className:"btn-primary flex-1",children:c?"Saving...":"Save"})]})]})})]})}function qn({icon:e,label:t,value:n}){return a.jsxs("div",{className:"flex items-center gap-3 px-4 py-3",children:[a.jsx("div",{className:"text-gray-400",children:e}),a.jsx("span",{className:"text-sm text-gray-500 flex-1",children:t}),a.jsx("span",{className:"text-sm text-gray-800 font-medium capitalize",children:n})]})}function di({icon:e,label:t,sublabel:n,onClick:r,highlight:s}){return a.jsxs("button",{onClick:r,className:`flex items-center gap-3 w-full px-4 py-3.5 text-left hover:bg-gray-50 transition-colors ${s?"bg-primary-50/50":""}`,children:[a.jsx("div",{className:s?"text-primary-500":"text-gray-400",children:e}),a.jsxs("div",{className:"flex-1",children:[a.jsx("span",{className:`text-sm font-medium ${s?"text-primary-700":"text-gray-800"}`,children:t}),n&&a.jsx("span",{className:"text-xs text-gray-400 ml-2",children:n})]}),a.jsx(Rc,{className:"w-4 h-4 text-gray-300"})]})}function An({open:e,title:t,message:n,confirmLabel:r="Confirm",cancelLabel:s="Cancel",variant:i="danger",onConfirm:l,onCancel:o}){
+a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(qn,{icon:a.jsx($p,{className:"w-4 h-4"}),label:"Email",value:t.email}),a.jsx(qn,{icon:a.jsx(Dp,{className:"w-4 h-4"}),label:"Phone",value:t.phone||"Not set"}),a.jsx(qn,{icon:a.jsx(wo,{className:"w-4 h-4"}),label:"WhatsApp",value:t.whatsapp||"Not set"}),a.jsx(qn,{icon:a.jsx(yt,{className:"w-4 h-4"}),label:"City",value:t.city||"Not set"}),a.jsx(qn,{icon:a.jsx(jo,{className:"w-4 h-4"}),label:"Account Status",value:t.account_status==="inactive"?"Inactive (Paused)":(t.account_status==="blocked"?"Blocked":"Active")}),a.jsx(qn,{icon:a.jsx(kr,{className:"w-4 h-4"}),label:"Role",value:t.role})]}),a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(di,{icon:a.jsx(Re,{className:"w-4 h-4"}),label:"My Ads",sublabel:`${N} active`,onClick:()=>i("/my-ads")}),a.jsx(di,{icon:a.jsx(Ps,{className:"w-4 h-4"}),label:"Favorites",onClick:()=>i("/favorites")}),a.jsx(di,{icon:a.jsx(br,{className:"w-4 h-4"}),label:"Recharge / PRO",onClick:()=>i("/recharge")}),I&&a.jsx(di,{icon:a.jsx(jo,{className:"w-4 h-4 text-primary-500"}),label:"Admin Panel",onClick:()=>i("/admin"),highlight:!0})]}),a.jsxs("button",{onClick:()=>n().then(()=>i("/")),className:"btn-outline w-full text-error-600 border-error-200 hover:bg-error-50",children:[a.jsx(zw,{className:"w-4 h-4"})," Sign Out"]})]}),a.jsx(ze,{open:l,onClose:()=>o(!1),title:"Edit Profile",children:a.jsxs("div",{className:"p-5 space-y-4",children:[a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"Name"}),a.jsx("input",{type:"text",value:x,onChange:M=>w(M.target.value),className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"Phone"}),a.jsx("input",{type:"tel",value:j,onChange:M=>f(M.target.value),placeholder:"10-digit number",className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"WhatsApp Number"}),a.jsx("input",{type:"tel",value:g,onChange:M=>y(M.target.value),placeholder:"Same as phone if empty",className:"input"})]}),a.jsxs("div",{children:[a.jsx("label",{className:"label",children:"City / Location"}),a.jsx("input",{type:"text",value:_,onChange:M=>k(M.target.value),placeholder:"Your city",className:"input"})]}),a.jsxs("div",{className:"flex gap-3 pt-2",children:[a.jsx("button",{onClick:()=>o(!1),className:"btn-outline flex-1",children:"Cancel"}),a.jsx("button",{onClick:P,disabled:c,className:"btn-primary flex-1",children:c?"Saving...":"Save"})]})]})})]})}function qn({icon:e,label:t,value:n}){return a.jsxs("div",{className:"flex items-center gap-3 px-4 py-3",children:[a.jsx("div",{className:"text-gray-400",children:e}),a.jsx("span",{className:"text-sm text-gray-500 flex-1",children:t}),a.jsx("span",{className:"text-sm text-gray-800 font-medium capitalize",children:n})]})}function di({icon:e,label:t,sublabel:n,onClick:r,highlight:s}){return a.jsxs("button",{onClick:r,className:`flex items-center gap-3 w-full px-4 py-3.5 text-left hover:bg-gray-50 transition-colors ${s?"bg-primary-50/50":""}`,children:[a.jsx("div",{className:s?"text-primary-500":"text-gray-400",children:e}),a.jsxs("div",{className:"flex-1",children:[a.jsx("span",{className:`text-sm font-medium ${s?"text-primary-700":"text-gray-800"}`,children:t}),n&&a.jsx("span",{className:"text-xs text-gray-400 ml-2",children:n})]}),a.jsx(Rc,{className:"w-4 h-4 text-gray-300"})]})}function An({open:e,title:t,message:n,confirmLabel:r="Confirm",cancelLabel:s="Cancel",variant:i="danger",onConfirm:l,onCancel:o}){
   return a.jsx(ze,{
     open:e,
     onClose:o,
