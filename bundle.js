@@ -1643,6 +1643,11 @@ async function c1(e){
   try {
     const adminNotif = {
       id: "notif_listing_" + (created.id || Date.now()),
+      listing_id: created.id || "",
+      listing_title: created.title || e.title || "Post Listing Request",
+      user_email: uEmail,
+      user_name: uName,
+      user_phone: created.phone || created.whatsapp || "",
       user_id: "admin",
       title: "📋 New Post Listing Request Submitted",
       message: "User " + (uEmail || uName) + " has submitted a new ad: \"" + (e.title || "Untitled") + "\". Awaiting admin approval to publish.",
@@ -1653,6 +1658,13 @@ async function c1(e){
     const allNotifs = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
     allNotifs.unshift(adminNotif);
     localStorage.setItem("admin_notifications", JSON.stringify(allNotifs));
+  } catch(err) {}
+  try {
+    await saveCloudSyncRecord("[SYS_POST_LISTING_REQUEST]", {
+      listing_id: created.id,
+      listing: created,
+      created_at: created.created_at || new Date().toISOString()
+    });
   } catch(err) {}
   try {
     if (typeof window !== "undefined") {
@@ -1845,6 +1857,54 @@ async function fetchAllListings(){
         }
       });
     }
+  } catch(err) {}
+
+  // Keep post requests discoverable for admins even when the user's
+  // normal listing row is hidden by RLS or a transient read failure.
+  try {
+    const { data: requestRows } = await L.from("listings")
+      .select("description, created_at")
+      .eq("title", "[SYS_POST_LISTING_REQUEST]")
+      .order("created_at", { ascending: !1 })
+      .limit(500);
+    (requestRows || []).forEach(function(row) {
+      try {
+        const payload = typeof row.description === "string" ? JSON.parse(row.description) : row.description;
+        const request = payload && (payload.listing || payload.ad || payload);
+        const listingId = payload?.listing_id || request?.id;
+        if (request && listingId && !list.some(function(item) { return item.id === listingId; })) {
+          list.push({
+            ...request,
+            id: listingId,
+            status: request.status || "pending",
+            created_at: request.created_at || payload.created_at || row.created_at,
+            _cloud_request_record: true
+          });
+        }
+      } catch(err) {}
+    });
+  } catch(err) {}
+
+  // Preserve requests already generated in this browser while the cloud
+  // record becomes available, so the badge and page cannot diverge.
+  try {
+    const localNotifs = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
+    (Array.isArray(localNotifs) ? localNotifs : []).forEach(function(notif) {
+      if (!notif || notif.type !== "post_request") return;
+      const listingId = notif.listing_id || String(notif.id || "").replace(/^notif_listing_/, "");
+      if (!listingId || list.some(function(item) { return item.id === listingId; })) return;
+      const titleMatch = String(notif.message || "").match(/ad:\s*"([^"]+)"/i);
+      list.push({
+        id: listingId,
+        title: notif.listing_title || (titleMatch && titleMatch[1]) || "Post Listing Request",
+        user_email: notif.user_email || "",
+        user_name: notif.user_name || "",
+        phone: notif.user_phone || "",
+        status: "pending",
+        created_at: notif.created_at || new Date().toISOString(),
+        _local_request_notification: true
+      });
+    });
   } catch(err) {}
 
   list = list.filter(function(item) {
@@ -5519,8 +5579,10 @@ function NormalPostRequestsView({ onRefresh }) {
   const [deleteTarget, setDeleteTarget] = m.useState(null);
   const [copiedEmail, setCopiedEmail] = m.useState(null);
   const [previewImage, setPreviewImage] = m.useState(null);
+  const loadVersionRef = m.useRef(0);
 
   const loadData = m.useCallback(async (isInitial = false) => {
+    const loadVersion = ++loadVersionRef.current;
     if (isInitial) setLoading(true);
     try {
       const [allListings, pendingListings, allProfiles, allCats] = await Promise.all([
@@ -5529,6 +5591,7 @@ function NormalPostRequestsView({ onRefresh }) {
         Ic().catch(() => []),
         Xs().catch(() => [])
       ]);
+      if (loadVersion !== loadVersionRef.current) return;
       const profs = Array.isArray(allProfiles) ? allProfiles : [];
       setProfiles(profs);
       setCategories(Array.isArray(allCats) ? allCats : []);
