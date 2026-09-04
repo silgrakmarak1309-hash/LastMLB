@@ -1847,7 +1847,7 @@ async function Gp(){
   } catch(err) {}
 
   list = list.filter(function(item) {
-    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && item.status !== "deleted" && !deletedIds.includes(item.id);
+    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && getAdminListingStatus(item) !== "deleted" && !deletedIds.includes(item.id);
   });
 
   return list.map(function(item) {
@@ -1859,9 +1859,119 @@ async function Gp(){
         is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
       };
     }
-    return item;
+    const normalizedStatus = getAdminListingStatus(item);
+    return normalizedStatus && normalizedStatus !== item.status
+      ? { ...item, status: normalizedStatus }
+      : item;
   });
 }
+
+function getAdminListingStatus(item) {
+  if (!item) return "";
+  const rawStatus = item.status ?? item.listing_status ?? item.approval_status ?? item.approvalState ?? "";
+  return String(rawStatus).trim().toLowerCase();
+}
+
+function isPendingPostListing(item) {
+  const status = getAdminListingStatus(item);
+  return status === "pending" || status === "unreviewed";
+}
+
+async function getAdminPostListingRequests() {
+  const listings = await Gp();
+  return (listings || []).filter(isPendingPostListing);
+}
+
+async function L1Fixed(e) {
+  const input = { ...e };
+  const isUuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const payload = { ...input };
+  let savedRemote = null;
+
+  if (input.id && !isUuid(input.id)) delete payload.id;
+
+  if (input.id && isUuid(input.id)) {
+    const { data, error } = await L.from("pro_plans")
+      .update(payload)
+      .eq("id", input.id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    savedRemote = data;
+    if (!savedRemote) {
+      const { data: inserted, error: insertError } = await L.from("pro_plans")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (insertError) throw insertError;
+      savedRemote = inserted;
+    }
+  } else {
+    let existing = null;
+    if (input.name) {
+      const { data, error } = await L.from("pro_plans")
+        .select("*")
+        .eq("name", String(input.name).trim())
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      existing = data;
+    }
+
+    if (existing?.id) {
+      const updatePayload = { ...input };
+      delete updatePayload.id;
+      const { data, error } = await L.from("pro_plans")
+        .update(updatePayload)
+        .eq("id", existing.id)
+        .select("*")
+        .maybeSingle();
+      if (error) throw error;
+      savedRemote = data || { ...existing, ...input, id: existing.id };
+    } else {
+      const { data, error } = await L.from("pro_plans")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (error) throw error;
+      savedRemote = data;
+    }
+  }
+
+  const savedItem = savedRemote || { ...input };
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem("admin_plans") || "[]");
+  } catch(err) {}
+  if (!Array.isArray(saved) || saved.length === 0) {
+    saved = [
+      { id: "plan_1m", name: "1 Month PRO", duration_days: 30, price: 112.5, description: "30 days priority listings & PRO badge", is_active: true, sort_order: 1 },
+      { id: "plan_3m", name: "3 Months PRO", duration_days: 90, price: 120, description: "90 days priority listings & PRO badge", is_active: true, sort_order: 2 },
+      { id: "plan_6m", name: "6 Months PRO", duration_days: 180, price: 200, description: "180 days priority listings & PRO badge", is_active: true, sort_order: 3 },
+      { id: "plan_1y", name: "1 Year PRO", duration_days: 365, price: 350, description: "365 days priority listings & PRO badge", is_active: true, sort_order: 4 }
+    ];
+  }
+  const idx = saved.findIndex(function(plan) {
+    return plan && (
+      (savedItem.id && plan.id === savedItem.id) ||
+      (plan.name && savedItem.name && plan.name.toLowerCase().trim() === savedItem.name.toLowerCase().trim())
+    );
+  });
+  if (idx >= 0) saved[idx] = { ...saved[idx], ...savedItem };
+  else saved.push(savedItem);
+  try {
+    localStorage.setItem("admin_plans", JSON.stringify(saved));
+  } catch(err) {}
+  try {
+    await syncCloudConfig({ plans: saved.filter(plan => !plan.is_deleted) });
+  } catch(err) {}
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("pro_plans_updated", { detail: saved }));
+    window.dispatchEvent(new Event("storage"));
+  }
+  return savedItem;
+}
+L1 = L1Fixed;
 
 async function Jp(){
   let dbList = [];
@@ -4548,12 +4658,13 @@ a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(qn,{icon:
   const boostQrSrc = (paySettings.payment_qr_code || paySettings.upi_qr_code) ? (paySettings.payment_qr_code || paySettings.upi_qr_code) : ("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=" + encodeURIComponent("upi://pay?pa=" + boostUpiId + "&pn=Meri%20Local%20Bazaar&am=30&cu=INR&tn=Top%20PRO%20Listing%20Boost"));
 
 
+  const userId = e?.id || null;
   const w=m.useCallback(async()=>{
-    if(e){
+    if(userId){
       l(!0);
-      try{s(await qp(e.id))}catch{t.show("Failed to load your ads","error")}finally{l(!1)}
+      try{s(await qp(userId))}catch{t.show("Failed to load your ads","error")}finally{l(!1)}
     }
-  },[e,t]);
+  },[userId]);
 
   m.useEffect(()=>{w()},[w]);
 
@@ -5466,7 +5577,7 @@ function NormalPostRequestsView({ onRefresh }) {
   const counts = m.useMemo(() => {
     return {
       all: listings.length,
-      pending: listings.filter(l => l && (l.status === "pending" || l.status === "unreviewed")).length,
+      pending: listings.filter(isPendingPostListing).length,
       active: listings.filter(l => l && l.status === "active").length,
       unpublished: listings.filter(l => l && (l.status === "unpublished" || l.status === "paused" || l.status === "inactive")).length,
       rejected: listings.filter(l => l && l.status === "rejected").length
@@ -5476,8 +5587,8 @@ function NormalPostRequestsView({ onRefresh }) {
   const filteredListings = m.useMemo(() => {
     return listings.filter(item => {
       if (!item) return false;
-      const status = item.status || "active";
-      if (activeTab === "pending" && status !== "pending" && status !== "unreviewed") return false;
+      const status = getAdminListingStatus(item) || "active";
+      if (activeTab === "pending" && !isPendingPostListing(item)) return false;
       if (activeTab === "active" && status !== "active") return false;
       if (activeTab === "unpublished" && status !== "unpublished" && status !== "paused" && status !== "inactive") return false;
       if (activeTab === "rejected" && status !== "rejected") return false;
@@ -6301,8 +6412,8 @@ function TopProRequestsView({onRefresh}){
   const [postPendingCount, setPostPendingCount] = m.useState(0);
   const loadPostPendingCount = m.useCallback(async () => {
     try {
-      const list = await Gp();
-      const pCount = (list || []).filter(l => l && (l.status === "pending" || l.status === "unreviewed")).length;
+      const list = await getAdminPostListingRequests();
+      const pCount = list.length;
       setPostPendingCount(pCount);
     } catch(e) {}
   }, []);
@@ -6683,7 +6794,7 @@ function dj({onNavigate}){
   const d=[
     {label:"Total Users",value:n.length,icon:_o,color:"blue"},
     {label:"Active Users",value:n.filter(p=>p.account_status==="active").length,icon:_o,color:"green"},
-    {label:"Post Requests (Pending)",value:s.filter(p=>p.status==="pending"||p.status==="unreviewed").length,icon:Aw,color:"amber",isHighlight:!0,onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
+    {label:"Post Requests (Pending)",value:s.filter(isPendingPostListing).length,icon:Aw,color:"amber",isHighlight:!0,onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
     {label:"Active (Published)",value:s.filter(p=>p.status==="active").length,icon:Re,color:"green"},
     {label:"Unpublished (Paused)",value:s.filter(p=>p.status==="unpublished"||p.status==="paused").length,icon:Cw,color:"slate",onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
     {label:"Active Listings",value:s.filter(p=>p.status==="active").length,icon:Re,color:"green"},
