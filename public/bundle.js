@@ -255,7 +255,7 @@ async function bindDeviceEmailAsync(email) {
 function bindDeviceEmail(email) {
   bindDeviceEmailAsync(email).catch(()=>{});
 }
-function bw({children:e}){  const[t,n]=m.useState(null),  [r,s]=m.useState(null),  [i,l]=m.useState(null),  [o,c]=m.useState(!0),  u=m.useCallback(async w=>{    try {      let p_data=null;      try{const cached=localStorage.getItem("mlb_saved_profile_"+w);if(cached)p_data=JSON.parse(cached);}catch(e){}      try{        const{data:j,error:f}=await L.from("profiles").select("*").eq("id",w).maybeSingle();        if(!f&&j){p_data={...(p_data||{}),...j};}      }catch(err){}      try{        const{data:u_auth}=await L.auth.getUser();        const u_email=u_auth?.user?.email;        const u_name=u_auth?.user?.user_metadata?.name||u_email?.split('@')[0]||'User';        const isAdminUser = isUserAdmin({email:u_email});        if(!p_data){          p_data={id:w,email:u_email,name:u_name,role:isAdminUser?'super_admin':'user',account_status:'active',status:'active',is_pro:isAdminUser,pro_status:isAdminUser?'active':'inactive',created_at:new Date().toISOString()};          try{await L.from('profiles').upsert(p_data)}catch(err){}        }else{          if(isAdminUser){            p_data={...p_data,role:'super_admin',is_pro:!0,pro_status:'active'};            try{await L.from('profiles').update({role:'super_admin',is_pro:!0,pro_status:'active'}).eq('id',w)}catch(err){}          }        }      }catch(e){}      if(p_data){        try {          const syncState = await getCloudSyncState();          const userOverrides = syncState.userStatusOverrides || {};          const cleanEmail = (p_data.email || "").trim().toLowerCase();          const uCloud = userOverrides[p_data.id] || (cleanEmail ? userOverrides[cleanEmail] : null);          if (uCloud) {            if (uCloud.account_status !== undefined) p_data.account_status = uCloud.account_status;            if (uCloud.status !== undefined) p_data.status = uCloud.status;            if (uCloud.is_pro !== undefined) p_data.is_pro = uCloud.is_pro;            if (uCloud.pro_status !== undefined) p_data.pro_status = uCloud.pro_status;            if (uCloud.pro_expires_at) p_data.pro_expires_at = uCloud.pro_expires_at;            if (uCloud.approved_expiry_date) p_data.approved_expiry_date = uCloud.approved_expiry_date;          }        } catch(err) {}        try {          const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");          const sOverride = statusOverrides[p_data.id] || (p_data.email && (statusOverrides[p_data.email] || statusOverrides[p_data.email.toLowerCase().trim()]));          if (sOverride) {            const val = (typeof sOverride === "object" && sOverride.account_status) ? sOverride.account_status : sOverride;            if (typeof val === "string") {              p_data.account_status = val;              p_data.status = val;            }          }          const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");          const pOverride = proOverrides[p_data.id] || (p_data.email && (proOverrides[p_data.email] || proOverrides[p_data.email.toLowerCase().trim()]));          if (pOverride) {            if (pOverride.is_pro !== undefined) p_data.is_pro = pOverride.is_pro;            if (pOverride.pro_status !== undefined) p_data.pro_status = pOverride.pro_status;            if (pOverride.pro_expires_at) p_data.pro_expires_at = pOverride.pro_expires_at;            if (pOverride.approved_expiry_date) p_data.approved_expiry_date = pOverride.approved_expiry_date;          }        } catch(err) {}        try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}      }      l(p_data);    } catch(err) {      console.warn('Profile fetch failure:', err);    }  },[]),  d=m.useCallback(async()=>{t&&await u(t.id)},[t,u]);  m.useEffect(()=>{    let isMounted = true;    const safetyTimer = setTimeout(() => {      if (isMounted) c(false);    }, 1500);    try {      L.auth.getSession().then(({data:j})=>{        if (!isMounted) return;        var f,g;        s(j.session);        n(((f=j.session)==null?void 0:f.user)??null);        if((g=j.session)!=null&&g.user){          u(j.session.user.id).catch(()=>{}).finally(()=>{ if(isMounted) c(false); });        } else {          if (isMounted) c(false);        }      }).catch(err => {        console.warn('getSession error:', err);        if (isMounted) c(false);      });    } catch(err) {      if (isMounted) c(false);    }    let unsub = null;    try {      const { data: w } = L.auth.onAuthStateChange((j,f)=>{        if (!isMounted) return;        s(f);        n((f==null?void 0:f.user)??null);        if(f!=null&&f.user){          u(f.user.id).catch(()=>{});        } else {          l(null);        }      });      unsub = w?.subscription?.unsubscribe;    } catch(err) {}    const handleProfileSync = () => {      if (t) u(t.id).catch(()=>{});    };    const intervalSync = setInterval(() => {      if (isMounted && t) {        u(t.id).catch(()=>{});      }    }, 8000);    window.addEventListener("user_profile_updated", handleProfileSync);    window.addEventListener("user_status_changed", handleProfileSync);    window.addEventListener("recharge_status_updated", handleProfileSync);    window.addEventListener("storage", handleProfileSync);    window.addEventListener("focus", handleProfileSync);    document.addEventListener("visibilitychange", handleProfileSync);    return () => {      isMounted = false;      clearTimeout(safetyTimer);      clearInterval(intervalSync);      if(unsub) unsub();      window.removeEventListener("user_profile_updated", handleProfileSync);      window.removeEventListener("user_status_changed", handleProfileSync);      window.removeEventListener("recharge_status_updated", handleProfileSync);      window.removeEventListener("storage", handleProfileSync);      window.removeEventListener("focus", handleProfileSync);      document.removeEventListener("visibilitychange", handleProfileSync);    };  },[t,u]);  const h=async(w,j,f)=>{try{const{error:g}=await L.auth.signUp({email:w,password:j,options:{data:{name:f}}});return{error:(g==null?void 0:g.message)??null}}catch(e){return{error:e.message||'Sign up failed'}}},  p=async(w,j)=>{try{const{error:f}=await L.auth.signInWithPassword({email:w,password:j});return{error:(f==null?void 0:f.message)??null}}catch(e){return{error:e.message||'Sign in failed'}}},  v=async()=>{try{await L.auth.signOut()}catch(e){}l(null)},  x=async w=>{try{const{error:j}=await L.auth.resetPasswordForEmail(w);return{error:(j==null?void 0:j.message)??null}}catch(e){return{error:e.message||'Reset failed'}}};    m.useEffect(function() {    if (t && i) {      try { checkProExpiryNotifications(t, i); } catch(e) {}      const interval = setInterval(function() {        try { checkProExpiryNotifications(t, i); } catch(e) {}      }, 3600000);      return function() { clearInterval(interval); };    }  }, [t, i]);  return a.jsx(Tp.Provider,{value:{user:t,session:r,profile:i,loading:o,signUp:h,signIn:p,signOut:v,resetPassword:x,refreshProfile:d},children:e})}function Ae(){const e=m.useContext(Tp);if(!e)throw new Error("useAuth must be used within AuthProvider");return e}/**
+function bw({children:e}){  const[t,n]=m.useState(null),  [r,s]=m.useState(null),  [i,l]=m.useState(null),  [o,c]=m.useState(!0),  userRef=m.useRef(null),  u=m.useCallback(async w=>{    try {      let p_data=null;      try{const cached=localStorage.getItem("mlb_saved_profile_"+w);if(cached)p_data=JSON.parse(cached);}catch(e){}      try{        const{data:j,error:f}=await L.from("profiles").select("*").eq("id",w).maybeSingle();        if(!f&&j){p_data={...(p_data||{}),...j};}      }catch(err){}      try{        const{data:u_auth}=await L.auth.getUser();        const u_email=u_auth?.user?.email;        const u_name=u_auth?.user?.user_metadata?.name||u_email?.split('@')[0]||'User';        const isAdminUser = isUserAdmin({email:u_email});        if(!p_data){          p_data={id:w,email:u_email,name:u_name,role:isAdminUser?'super_admin':'user',account_status:'active',status:'active',is_pro:isAdminUser,pro_status:isAdminUser?'active':'inactive',created_at:new Date().toISOString()};          try{await L.from('profiles').upsert(p_data)}catch(err){}        }else{          if(isAdminUser){            p_data={...p_data,role:'super_admin',is_pro:!0,pro_status:'active'};            try{await L.from('profiles').update({role:'super_admin',is_pro:!0,pro_status:'active'}).eq('id',w)}catch(err){}          }        }      }catch(e){}      if(p_data){        try {          const syncState = await getCloudSyncState();          const userOverrides = syncState.userStatusOverrides || {};          const cleanEmail = (p_data.email || "").trim().toLowerCase();          const uCloud = userOverrides[p_data.id] || (cleanEmail ? userOverrides[cleanEmail] : null);          if (uCloud) {            if (uCloud.account_status !== undefined) p_data.account_status = uCloud.account_status;            if (uCloud.status !== undefined) p_data.status = uCloud.status;            if (uCloud.is_pro !== undefined) p_data.is_pro = uCloud.is_pro;            if (uCloud.pro_status !== undefined) p_data.pro_status = uCloud.pro_status;            if (uCloud.pro_expires_at) p_data.pro_expires_at = uCloud.pro_expires_at;            if (uCloud.approved_expiry_date) p_data.approved_expiry_date = uCloud.approved_expiry_date;          }        } catch(err) {}        try {          const statusOverrides = JSON.parse(localStorage.getItem("admin_status_overrides") || "{}");          const sOverride = statusOverrides[p_data.id] || (p_data.email && (statusOverrides[p_data.email] || statusOverrides[p_data.email.toLowerCase().trim()]));          if (sOverride) {            const val = (typeof sOverride === "object" && sOverride.account_status) ? sOverride.account_status : sOverride;            if (typeof val === "string") {              p_data.account_status = val;              p_data.status = val;            }          }          const proOverrides = JSON.parse(localStorage.getItem("admin_pro_overrides") || "{}");          const pOverride = proOverrides[p_data.id] || (p_data.email && (proOverrides[p_data.email] || proOverrides[p_data.email.toLowerCase().trim()]));          if (pOverride) {            if (pOverride.is_pro !== undefined) p_data.is_pro = pOverride.is_pro;            if (pOverride.pro_status !== undefined) p_data.pro_status = pOverride.pro_status;            if (pOverride.pro_expires_at) p_data.pro_expires_at = pOverride.pro_expires_at;            if (pOverride.approved_expiry_date) p_data.approved_expiry_date = pOverride.approved_expiry_date;          }        } catch(err) {}        try{localStorage.setItem("mlb_saved_profile_"+w,JSON.stringify(p_data));}catch(err){}      }      l(p_data);    } catch(err) {      console.warn('Profile fetch failure:', err);    }  },[]),  d=m.useCallback(async()=>{const currentUser=userRef.current;currentUser&&await u(currentUser.id)},[u]);  m.useEffect(()=>{    let isMounted = true;    const safetyTimer = setTimeout(() => {      if (isMounted) c(false);    }, 1500);    try {      L.auth.getSession().then(({data:j})=>{        if (!isMounted) return;        var f,g;        s(j.session);        userRef.current=((f=j.session)==null?void 0:f.user)??null;        n(userRef.current);        if((g=j.session)!=null&&g.user){          u(j.session.user.id).catch(()=>{}).finally(()=>{ if(isMounted) c(false); });        } else {          if (isMounted) c(false);        }      }).catch(err => {        console.warn('getSession error:', err);        if (isMounted) c(false);      });    } catch(err) {      if (isMounted) c(false);    }    let unsub = null;    try {      const { data: w } = L.auth.onAuthStateChange((j,f)=>{        if (!isMounted) return;        s(f);        userRef.current=(f==null?void 0:f.user)??null;        n(userRef.current);        if(f!=null&&f.user){          u(f.user.id).catch(()=>{});        } else {          l(null);        }      });      unsub = w?.subscription?.unsubscribe;    } catch(err) {}    const handleProfileSync = () => {      const currentUser=userRef.current;      if (currentUser) u(currentUser.id).catch(()=>{});    };    window.addEventListener("user_profile_updated", handleProfileSync);    window.addEventListener("user_status_changed", handleProfileSync);    window.addEventListener("recharge_status_updated", handleProfileSync);    window.addEventListener("storage", handleProfileSync);    window.addEventListener("focus", handleProfileSync);    document.addEventListener("visibilitychange", handleProfileSync);    return () => {      isMounted = false;      clearTimeout(safetyTimer);      if(unsub) unsub();      window.removeEventListener("user_profile_updated", handleProfileSync);      window.removeEventListener("user_status_changed", handleProfileSync);      window.removeEventListener("recharge_status_updated", handleProfileSync);      window.removeEventListener("storage", handleProfileSync);      window.removeEventListener("focus", handleProfileSync);      document.removeEventListener("visibilitychange", handleProfileSync);    };  },[u]);  const h=async(w,j,f)=>{try{const{error:g}=await L.auth.signUp({email:w,password:j,options:{data:{name:f}}});return{error:(g==null?void 0:g.message)??null}}catch(e){return{error:e.message||'Sign up failed'}}},  p=async(w,j)=>{try{const{error:f}=await L.auth.signInWithPassword({email:w,password:j});return{error:(f==null?void 0:f.message)??null}}catch(e){return{error:e.message||'Sign in failed'}}},  v=async()=>{try{await L.auth.signOut()}catch(e){}l(null)},  x=async w=>{try{const{error:j}=await L.auth.resetPasswordForEmail(w);return{error:(j==null?void 0:j.message)??null}}catch(e){return{error:e.message||'Reset failed'}}};    m.useEffect(function() {    if (t && i) {      try { checkProExpiryNotifications(t, i); } catch(e) {}      const interval = setInterval(function() {        try { checkProExpiryNotifications(t, i); } catch(e) {}      }, 3600000);      return function() { clearInterval(interval); };    }  }, [t, i]);  return a.jsx(Tp.Provider,{value:{user:t,session:r,profile:i,loading:o,signUp:h,signIn:p,signOut:v,resetPassword:x,refreshProfile:d},children:e})}function Ae(){const e=m.useContext(Tp);if(!e)throw new Error("useAuth must be used within AuthProvider");return e}/**
  * @license lucide-react v0.446.0 - ISC
  *
  * This source code is licensed under the ISC license.
@@ -1643,6 +1643,11 @@ async function c1(e){
   try {
     const adminNotif = {
       id: "notif_listing_" + (created.id || Date.now()),
+      listing_id: created.id || "",
+      listing_title: created.title || e.title || "Post Listing Request",
+      user_email: uEmail,
+      user_name: uName,
+      user_phone: created.phone || created.whatsapp || "",
       user_id: "admin",
       title: "📋 New Post Listing Request Submitted",
       message: "User " + (uEmail || uName) + " has submitted a new ad: \"" + (e.title || "Untitled") + "\". Awaiting admin approval to publish.",
@@ -1655,7 +1660,15 @@ async function c1(e){
     localStorage.setItem("admin_notifications", JSON.stringify(allNotifs));
   } catch(err) {}
   try {
+    await saveCloudSyncRecord("[SYS_POST_LISTING_REQUEST]", {
+      listing_id: created.id,
+      listing: created,
+      created_at: created.created_at || new Date().toISOString()
+    });
+  } catch(err) {}
+  try {
     if (typeof window !== "undefined") {
+      invalidateAdminListingsCache();
       window.dispatchEvent(new CustomEvent("listing_created", { detail: created }));
       window.dispatchEvent(new CustomEvent("listing_status_updated", { detail: { id: created.id, status: "pending" } }));
       window.dispatchEvent(new Event("storage"));
@@ -1817,7 +1830,7 @@ async function u1(e){  try {    const delList = JSON.parse(localStorage.getItem(
   });
 }
 
-async function Gp(){
+async function fetchAllListings(){
   let list = [];
   let syncState = { deletedListingIds: [], listingStatusOverrides: {} };
   try { syncState = await getCloudSyncState(); } catch(err) {}
@@ -1846,8 +1859,56 @@ async function Gp(){
     }
   } catch(err) {}
 
+  // Keep post requests discoverable for admins even when the user's
+  // normal listing row is hidden by RLS or a transient read failure.
+  try {
+    const { data: requestRows } = await L.from("listings")
+      .select("description, created_at")
+      .eq("title", "[SYS_POST_LISTING_REQUEST]")
+      .order("created_at", { ascending: !1 })
+      .limit(500);
+    (requestRows || []).forEach(function(row) {
+      try {
+        const payload = typeof row.description === "string" ? JSON.parse(row.description) : row.description;
+        const request = payload && (payload.listing || payload.ad || payload);
+        const listingId = payload?.listing_id || request?.id;
+        if (request && listingId && !list.some(function(item) { return item.id === listingId; })) {
+          list.push({
+            ...request,
+            id: listingId,
+            status: request.status || "pending",
+            created_at: request.created_at || payload.created_at || row.created_at,
+            _cloud_request_record: true
+          });
+        }
+      } catch(err) {}
+    });
+  } catch(err) {}
+
+  // Preserve requests already generated in this browser while the cloud
+  // record becomes available, so the badge and page cannot diverge.
+  try {
+    const localNotifs = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
+    (Array.isArray(localNotifs) ? localNotifs : []).forEach(function(notif) {
+      if (!notif || notif.type !== "post_request") return;
+      const listingId = notif.listing_id || String(notif.id || "").replace(/^notif_listing_/, "");
+      if (!listingId || list.some(function(item) { return item.id === listingId; })) return;
+      const titleMatch = String(notif.message || "").match(/ad:\s*"([^"]+)"/i);
+      list.push({
+        id: listingId,
+        title: notif.listing_title || (titleMatch && titleMatch[1]) || "Post Listing Request",
+        user_email: notif.user_email || "",
+        user_name: notif.user_name || "",
+        phone: notif.user_phone || "",
+        status: "pending",
+        created_at: notif.created_at || new Date().toISOString(),
+        _local_request_notification: true
+      });
+    });
+  } catch(err) {}
+
   list = list.filter(function(item) {
-    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && item.status !== "deleted" && !deletedIds.includes(item.id);
+    return item && !String(item.title || "").startsWith("[SYS_") && item.title !== "[SYS_APP_CONFIG]" && item.title !== "SYS_APP_CONFIG" && getAdminListingStatus(item) !== "deleted" && !deletedIds.includes(item.id);
   });
 
   return list.map(function(item) {
@@ -1859,9 +1920,164 @@ async function Gp(){
         is_featured: override.is_featured !== undefined ? override.is_featured : item.is_featured
       };
     }
-    return item;
+    const normalizedStatus = getAdminListingStatus(item);
+    return normalizedStatus && normalizedStatus !== item.status
+      ? { ...item, status: normalizedStatus }
+      : item;
   });
 }
+
+let _adminListingsCache = null;
+let _adminListingsCacheAt = 0;
+let _adminListingsInFlight = null;
+const ADMIN_LISTINGS_CACHE_TTL = 2000;
+
+function invalidateAdminListingsCache() {
+  _adminListingsCache = null;
+  _adminListingsCacheAt = 0;
+}
+
+async function Gp() {
+  const now = Date.now();
+  if (_adminListingsCache && now - _adminListingsCacheAt < ADMIN_LISTINGS_CACHE_TTL) {
+    return _adminListingsCache;
+  }
+  if (_adminListingsInFlight) return _adminListingsInFlight;
+
+  _adminListingsInFlight = fetchAllListings().then(function(result) {
+    const next = Array.isArray(result) ? result : [];
+    // Never replace a known-good snapshot with a transient empty response.
+    if (next.length > 0 || !_adminListingsCache) {
+      _adminListingsCache = next;
+    }
+    _adminListingsCacheAt = Date.now();
+    return _adminListingsCache || next;
+  }).catch(function(err) {
+    if (_adminListingsCache) return _adminListingsCache;
+    return [];
+  }).finally(function() {
+    _adminListingsInFlight = null;
+  });
+
+  return _adminListingsInFlight;
+}
+
+function getAdminListingStatus(item) {
+  if (!item) return "";
+  const rawStatuses = [
+    item.status,
+    item.listing_status,
+    item.approval_status,
+    item.approvalState
+  ].filter(value => value !== undefined && value !== null && value !== "");
+  const normalized = rawStatuses.map(value => String(value).trim().toLowerCase().replace(/[\s-]+/g, "_"));
+  if (normalized.includes("deleted") || normalized.includes("removed")) return "deleted";
+  if (normalized.some(value => ["pending", "pending_review", "under_review", "awaiting_review", "unreviewed", "submitted"].includes(value))) return "pending";
+  if (normalized.some(value => ["published", "live"].includes(value))) return "active";
+  if (normalized.includes("paused")) return "paused";
+  return normalized[0] || "";
+}
+
+function isPendingPostListing(item) {
+  const status = getAdminListingStatus(item);
+  return status === "pending" || status === "unreviewed";
+}
+
+async function getAdminPostListingRequests() {
+  const listings = await Gp();
+  return (listings || []).filter(isPendingPostListing);
+}
+
+async function L1Fixed(e) {
+  const input = { ...e };
+  const isUuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const payload = { ...input };
+  let savedRemote = null;
+
+  if (input.id && !isUuid(input.id)) delete payload.id;
+
+  if (input.id && isUuid(input.id)) {
+    const { data, error } = await L.from("pro_plans")
+      .update(payload)
+      .eq("id", input.id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    savedRemote = data;
+    if (!savedRemote) {
+      const { data: inserted, error: insertError } = await L.from("pro_plans")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (insertError) throw insertError;
+      savedRemote = inserted;
+    }
+  } else {
+    let existing = null;
+    if (input.name) {
+      const { data, error } = await L.from("pro_plans")
+        .select("*")
+        .eq("name", String(input.name).trim())
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      existing = data;
+    }
+
+    if (existing?.id) {
+      const updatePayload = { ...input };
+      delete updatePayload.id;
+      const { data, error } = await L.from("pro_plans")
+        .update(updatePayload)
+        .eq("id", existing.id)
+        .select("*")
+        .maybeSingle();
+      if (error) throw error;
+      savedRemote = data || { ...existing, ...input, id: existing.id };
+    } else {
+      const { data, error } = await L.from("pro_plans")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (error) throw error;
+      savedRemote = data;
+    }
+  }
+
+  const savedItem = savedRemote || { ...input };
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem("admin_plans") || "[]");
+  } catch(err) {}
+  if (!Array.isArray(saved) || saved.length === 0) {
+    saved = [
+      { id: "plan_1m", name: "1 Month PRO", duration_days: 30, price: 112.5, description: "30 days priority listings & PRO badge", is_active: true, sort_order: 1 },
+      { id: "plan_3m", name: "3 Months PRO", duration_days: 90, price: 120, description: "90 days priority listings & PRO badge", is_active: true, sort_order: 2 },
+      { id: "plan_6m", name: "6 Months PRO", duration_days: 180, price: 200, description: "180 days priority listings & PRO badge", is_active: true, sort_order: 3 },
+      { id: "plan_1y", name: "1 Year PRO", duration_days: 365, price: 350, description: "365 days priority listings & PRO badge", is_active: true, sort_order: 4 }
+    ];
+  }
+  const idx = saved.findIndex(function(plan) {
+    return plan && (
+      (savedItem.id && plan.id === savedItem.id) ||
+      (plan.name && savedItem.name && plan.name.toLowerCase().trim() === savedItem.name.toLowerCase().trim())
+    );
+  });
+  if (idx >= 0) saved[idx] = { ...saved[idx], ...savedItem };
+  else saved.push(savedItem);
+  try {
+    localStorage.setItem("admin_plans", JSON.stringify(saved));
+  } catch(err) {}
+  try {
+    await syncCloudConfig({ plans: saved.filter(plan => !plan.is_deleted) });
+  } catch(err) {}
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("pro_plans_updated", { detail: saved }));
+    window.dispatchEvent(new Event("storage"));
+  }
+  return savedItem;
+}
+L1 = L1Fixed;
 
 async function Jp(){
   let dbList = [];
@@ -2106,6 +2322,7 @@ async function xd(e,t,n){
     
     await saveCloudSyncRecord("[SYS_DELETED_LISTING]", { deleted_id: e, deleted_at: new Date().toISOString() });
     
+    invalidateAdminListingsCache();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("listing_deleted", { detail: { id: e } }));
       window.dispatchEvent(new Event("storage"));
@@ -2149,6 +2366,7 @@ async function xd(e,t,n){
     updated_at: new Date().toISOString()
   });
 
+  invalidateAdminListingsCache();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("listing_status_updated", { detail: { id: e, status: t, is_featured: n } }));
     window.dispatchEvent(new Event("storage"));
@@ -4028,45 +4246,7 @@ function K1(){const{signIn:e,signUp:t,resetPassword:n,refreshProfile:rf,user:cur
       window.dispatchEvent(new Event("storage"));
     }
   } catch(err) {}
-  return newReq;
 try {
-    if (isTopPro) {
-      sendAdminNotification({
-        req_id: insertId,
-        type: "top_pro_request",
-        title: "⭐ New Top PRO Listing Request",
-        message: "User " + uName + " (" + uEmail + ") requested Top PRO Boost for " + (newReq.listing_title || "Listing") + " (₹" + amt + ")",
-        user_name: uName,
-        user_email: uEmail,
-        user_phone: uPhone,
-        target_tab: "top_pro_requests",
-        listing_id: newReq.listing_id || "",
-        listing_title: newReq.listing_title || "Top PRO Listing",
-        plan_name: planObj?.name || "Top PRO Boost",
-        amount: amt,
-        utr: cleanUtr,
-        created_at: nowIso
-      });
-    } else {
-      sendAdminNotification({
-        req_id: insertId,
-        type: "monthly_plan_request",
-        title: "👑 New Monthly PRO Plan Request",
-        message: "User " + uName + " (" + uEmail + ") submitted recharge of ₹" + amt + " for " + (planObj?.name || "Monthly PRO") + " (UTR: " + cleanUtr + ")",
-        user_name: uName,
-        user_email: uEmail,
-        user_phone: uPhone,
-        target_tab: "recharges",
-        listing_id: "",
-        listing_title: "",
-        plan_name: planObj?.name || "Monthly PRO Plan",
-        amount: amt,
-        utr: cleanUtr,
-        created_at: nowIso
-      });
-    }
-  } catch(err) {}
-  try {
     if (isTopPro) {
       sendAdminNotification({
         req_id: insertId,
@@ -4548,12 +4728,13 @@ a.jsxs("div",{className:"card divide-y divide-gray-50",children:[a.jsx(qn,{icon:
   const boostQrSrc = (paySettings.payment_qr_code || paySettings.upi_qr_code) ? (paySettings.payment_qr_code || paySettings.upi_qr_code) : ("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=" + encodeURIComponent("upi://pay?pa=" + boostUpiId + "&pn=Meri%20Local%20Bazaar&am=30&cu=INR&tn=Top%20PRO%20Listing%20Boost"));
 
 
+  const userId = e?.id || null;
   const w=m.useCallback(async()=>{
-    if(e){
+    if(userId){
       l(!0);
-      try{s(await qp(e.id))}catch{t.show("Failed to load your ads","error")}finally{l(!1)}
+      try{s(await qp(userId))}catch{t.show("Failed to load your ads","error")}finally{l(!1)}
     }
-  },[e,t]);
+  },[userId]);
 
   m.useEffect(()=>{w()},[w]);
 
@@ -4717,11 +4898,12 @@ function lj(){
         [b, N] = m.useState(!1),
         [copiedUpi, setCopiedUpi] = m.useState(!1);
 
+  const userId = e?.id || null;
   const I = m.useCallback(async () => {
-    if (e) {
+    if (userId) {
       x(!0);
       try {
-        const [C, T, D, W] = await Promise.all([Xp(), Y1(e.id), X1(e.id), tj()]);
+        const [C, T, D, W] = await Promise.all([Xp(), Y1(userId), X1(userId), tj()]);
         l(C);
         c(T);
         d(D);
@@ -4732,7 +4914,7 @@ function lj(){
         x(!1);
       }
     }
-  }, [e, r]);
+  }, [userId, r]);
 
   m.useEffect(() => {
     I();
@@ -5397,20 +5579,28 @@ function NormalPostRequestsView({ onRefresh }) {
   const [deleteTarget, setDeleteTarget] = m.useState(null);
   const [copiedEmail, setCopiedEmail] = m.useState(null);
   const [previewImage, setPreviewImage] = m.useState(null);
+  const loadVersionRef = m.useRef(0);
 
   const loadData = m.useCallback(async (isInitial = false) => {
+    const loadVersion = ++loadVersionRef.current;
     if (isInitial) setLoading(true);
     try {
-      const [allListings, allProfiles, allCats] = await Promise.all([
+      const [allListings, pendingListings, allProfiles, allCats] = await Promise.all([
         Gp(),
+        getAdminPostListingRequests(),
         Ic().catch(() => []),
         Xs().catch(() => [])
       ]);
+      if (loadVersion !== loadVersionRef.current) return;
       const profs = Array.isArray(allProfiles) ? allProfiles : [];
       setProfiles(profs);
       setCategories(Array.isArray(allCats) ? allCats : []);
       
-      const enriched = (allListings || []).map(item => {
+      const listingMap = new Map();
+      [...(allListings || []), ...(pendingListings || [])].forEach(item => {
+        if (item && item.id) listingMap.set(item.id, item);
+      });
+      const enriched = Array.from(listingMap.values()).map(item => {
         if (!item) return item;
         const matchedProfile = profs.find(p => p && (p.id === item.user_id || (item.user_email && p.email === item.user_email)));
         const sellerEmail = item.user_email || (item.seller && item.seller.email) || matchedProfile?.email || (item.user && item.user.email) || "sengmimarak12@gmail.com";
@@ -5466,7 +5656,7 @@ function NormalPostRequestsView({ onRefresh }) {
   const counts = m.useMemo(() => {
     return {
       all: listings.length,
-      pending: listings.filter(l => l && (l.status === "pending" || l.status === "unreviewed")).length,
+      pending: listings.filter(isPendingPostListing).length,
       active: listings.filter(l => l && l.status === "active").length,
       unpublished: listings.filter(l => l && (l.status === "unpublished" || l.status === "paused" || l.status === "inactive")).length,
       rejected: listings.filter(l => l && l.status === "rejected").length
@@ -5476,8 +5666,8 @@ function NormalPostRequestsView({ onRefresh }) {
   const filteredListings = m.useMemo(() => {
     return listings.filter(item => {
       if (!item) return false;
-      const status = item.status || "active";
-      if (activeTab === "pending" && status !== "pending" && status !== "unreviewed") return false;
+      const status = getAdminListingStatus(item) || "active";
+      if (activeTab === "pending" && !isPendingPostListing(item)) return false;
       if (activeTab === "active" && status !== "active") return false;
       if (activeTab === "unpublished" && status !== "unpublished" && status !== "paused" && status !== "inactive") return false;
       if (activeTab === "rejected" && status !== "rejected") return false;
@@ -6301,8 +6491,8 @@ function TopProRequestsView({onRefresh}){
   const [postPendingCount, setPostPendingCount] = m.useState(0);
   const loadPostPendingCount = m.useCallback(async () => {
     try {
-      const list = await Gp();
-      const pCount = (list || []).filter(l => l && (l.status === "pending" || l.status === "unreviewed")).length;
+      const list = await getAdminPostListingRequests();
+      const pCount = list.length;
       setPostPendingCount(pCount);
     } catch(e) {}
   }, []);
@@ -6683,7 +6873,7 @@ function dj({onNavigate}){
   const d=[
     {label:"Total Users",value:n.length,icon:_o,color:"blue"},
     {label:"Active Users",value:n.filter(p=>p.account_status==="active").length,icon:_o,color:"green"},
-    {label:"Post Requests (Pending)",value:s.filter(p=>p.status==="pending"||p.status==="unreviewed").length,icon:Aw,color:"amber",isHighlight:!0,onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
+    {label:"Post Requests (Pending)",value:s.filter(isPendingPostListing).length,icon:Aw,color:"amber",isHighlight:!0,onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
     {label:"Active (Published)",value:s.filter(p=>p.status==="active").length,icon:Re,color:"green"},
     {label:"Unpublished (Paused)",value:s.filter(p=>p.status==="unpublished"||p.status==="paused").length,icon:Cw,color:"slate",onClick:()=>onNavigate&&onNavigate("normal_post_requests")},
     {label:"Active Listings",value:s.filter(p=>p.status==="active").length,icon:Re,color:"green"},
